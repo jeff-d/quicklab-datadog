@@ -1,0 +1,126 @@
+# This file is part of QuickLab, which creates simple, monitored labs.
+# https://github.com/jeff-d/quicklab
+#
+# SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: build-datadog
+
+on:
+  push:
+    paths:
+      - "main.tf"
+      - "*.auto.tfvars"
+      - ".github/workflows/build-datadog.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+env:
+  ## custom user agent for AWS Cloud Trail logging
+  # reference: https://registry.terraform.io/providers/hashicorp/aws/latest/docs#custom-user-agent-information
+  TF_APPEND_USER_AGENT: "GitHubActions/${{ github.repository }}/${{ github.workflow }}/${{ github.job }}"
+
+  ## QuickLab
+  TF_VAR_prefix: quicklab
+  TF_VAR_owner: "github: @${{ github.triggering_actor }}"
+  TF_VAR_createdwith: GitHub Actions
+  TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+  TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+  TF_VAR_datadog_app_key: ${{ secrets.DATADOG_APP_KEY }}
+
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    outputs:
+      commit-short-sha: ${{ steps.trim-sha.outputs.commit-short-sha }}
+      commit-title: ${{ steps.get-head-commit-title.outputs.commit-title }}
+    steps:
+      - name: trim sha
+        id: trim-sha
+        run: echo "commit-short-sha=`echo ${GITHUB_SHA} | cut -c1-7`" >> "$GITHUB_OUTPUT"
+        
+      - name: Checkout
+        uses: actions/checkout@v6
+        
+      - name: get commit title
+        id: get-head-commit-title
+        shell: bash
+        run: |
+          MESSAGE=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
+          if [ -n "$MESSAGE" ]; then
+            TITLE=$(echo "$MESSAGE" | perl -pe 's/[^\p{L}\p{Z}\p{N}_.\/:=+\-@]//g')
+          else
+            # a fallback for workflow_dispatch events
+            TITLE=$(git log -1 --pretty=%s)
+          fi
+          # Escape any quotes and special characters
+          TITLE=$(echo "$TITLE" | sed 's/"/\\"/g')
+          echo "commit-title=$TITLE" >> "$GITHUB_OUTPUT"  
+
+  datadog:
+    needs: prep
+    runs-on: ubuntu-latest
+    name: datadog
+    
+    env:
+      TF_VAR_project: commit-short-sha/${{needs.prep.outputs.commit-short-sha}}
+      TF_VAR_createdfor: commit-title/${{needs.prep.outputs.commit-title}}
+      TF_VAR_environment: ${{ github.workflow }}/${{ github.job }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.0"
+          terraform_wrapper: false
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        env: 
+          TF_LOG: "DEBUG"
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve
+        continue-on-error: true
+
+      - name: Wait Before Cleaning Up Failed Apply
+        id: wait
+        if: steps.apply.outcome == 'failure' # always()
+        run: sleep 300
+
+      - name: Terraform Destroy
+        id: destroy
+        run: terraform destroy -auto-approve
+
+      - name: Validate Job Status
+        id: validate-job-status
+        if: ${{ failure() }}
+        run: exit 1
