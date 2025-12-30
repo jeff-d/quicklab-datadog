@@ -6,20 +6,19 @@
 
 data "datadog_ip_ranges" "org" {}
 
-resource "datadog_organization_settings" "organization" {
+resource "datadog_organization_settings" "output" {
 }
-
 
 output "agent_endpoints" {
   value = data.datadog_ip_ranges.org.agents_ipv4
 }
 
 output "org_name" {
-  value = datadog_organization_settings.organization.name
+  value = datadog_organization_settings.output.name
 }
 output "org_id" {
-  value = datadog_organization_settings.organization.id
+  value = datadog_organization_settings.output.id
 }
 output "org_public_id" {
-  value = datadog_organization_settings.organization.public_id
+  value = datadog_organization_settings.output.public_id
 }
