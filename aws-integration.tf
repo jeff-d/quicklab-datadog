@@ -117,7 +117,7 @@ locals {
     "AWS/Bedrock/Guardrails", "AWS/ML", "AWS/SageMaker", "AWS/SageMaker/TrainingJobs",
 
     # serverless
-    "AWS/ApiGateway",
+    "AWS/ApiGateway", "AWS/Lambda",
 
     # data stores
     "AWS/RDS", "AWS/S3",
@@ -132,7 +132,7 @@ locals {
 
     # compute
     "AWS/EBS", "AWS/EC2", "AWS/EC2Spot", "AWS/ECR", "AWS/ECS",
-    "ECS/ContainerInsights", "EKS/ContainerInsights", "AWS/IoT", "AWS/IoTAnalytics", "AWS/WorkSpaces",
+    "ECS/ContainerInsights", "EKS/ContainerInsights", "AWS/IoT", "AWS/IoTAnalytics",
 
     # events
     "AWS/Events", "AWS/SES", "AWS/SNS", "AWS/SQS",
@@ -147,16 +147,16 @@ locals {
     # auditing
     "AWS/CloudTrail", "AWS/IAM", "AWS/KMS",
   ]
-  autosubscribe_log_sources = ["cloudtrail", "vpc"]
+  autosubscribe_log_sources = ["cloudtrail"]
 }
 
 resource "datadog_integration_aws_account" "datadog_integration" {
   account_tags   = [for k, v in local.datadog_tags : "${k}:${v}"] # list(string) Tags to apply to all metrics in the account. 
   aws_account_id = var.aws_account_id
-  aws_partition  = "aws"
+  aws_partition  = data.aws_partition.current.partition
 
   aws_regions {
-    include_only = ["${var.aws_region}"] # alternative to the empty-block behavior 'include_all  = true'
+    include_only = [data.aws_region.current.region] # alternative to the empty-block behavior 'include_all  = true'
   }
 
   auth_config {
@@ -202,7 +202,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
   logs_config {
 
     lambda_forwarder {
-      # lambdas = ["arn:aws:lambda:us-east-1:123456789012:function:my-lambda"] # Supports multiple forwarder ARNs. Only 1 Lambda function is required per AWS region for log collection.
+      lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)] # one function per region
       sources = [for src in local.autosubscribe_log_sources : src if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, src)]
 
       # sources = ["s3"] # allowed values in data.datadog_integration_aws_available_logs_services

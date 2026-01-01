@@ -4,9 +4,12 @@
 # SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+
 variable "datadog_api_key" { type = string }
 
 variable "datadog_app_key" { type = string }
+
+variable "datadog_site" { type = string }
 
 variable "cloud_resource_tags" {
   description = "A map of tags to add to all clous resources"
@@ -15,7 +18,7 @@ variable "cloud_resource_tags" {
 }
 
 variable "datadog_tags" {
-  description = "A map of tags to add to all Datadog resources"
+  description = "A map of tags to add to all Datadog resources and collected telemetry."
   type        = map(string)
   default     = {}
 }
@@ -38,29 +41,8 @@ variable "aws_account_id" {
   default     = null
 }
 
-variable "aws_region" {
-  type        = string
-  description = "AWS Region that scopes data collection for the Datadog AWS Integration"
-  default     = null
-}
-
 variable "integration_role_name" {
   type        = string
   description = "The name of the cross-account IAM role used for the Datadog AWS Account integration."
   default     = "DatadogIntegrationRole"
 }
-
-/*
-
-#! UNUSED
-
-variable "tags" {
-  description = "A map of tags to add to all resources"
-  type        = object({ datadog_tags = map(string), cloud_resource_tags = map(string) })
-  default = {
-    datadog_tags        = {}
-    cloud_resource_tags = {}
-  }
-}
-
-*/
