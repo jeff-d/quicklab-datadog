@@ -97,20 +97,19 @@ resource "aws_iam_role_policy_attachment" "datadog_aws_integration" {
   policy_arn = aws_iam_policy.datadog_aws_integration[count.index].arn
 }
 
-resource "aws_iam_role_policy_attachment" "datadog_aws_integration_securityaudit" {
-  role       = aws_iam_role.datadog_aws_integration.name
-  policy_arn = "arn:aws:iam::aws:policy/SecurityAudit"
-}
-
-resource "aws_iam_role_policy_attachment" "datadog_aws_integration_readonlyaccess" {
-  # contains additional permissions required for Extended Resource Collection on additional Datadog Products
-  # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
+resource "aws_iam_role_policy_attachment" "aws_managed_policies" {
+  for_each = toset(local.aws_managed_policies)
 
   role       = aws_iam_role.datadog_aws_integration.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+  policy_arn = "arn:aws:iam::aws:policy/${each.value}"
 }
 
 locals {
+  # contains additional permissions required for Extended Resource Collection on additional Datadog Products
+  # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
+  aws_managed_policies = ["SecurityAudit", "ReadOnlyAccess"]
+
+
   taggable_namespaces = ["AWS/ApplicationELB", "AWS/ELB", "AWS/EC2", "AWS/Lambda", "AWS/AmazonMQ", "AWS/Kafka", "AWS/NetworkELB", "AWS/RDS", "AWS/SQS", "AWS/States"]
   include_metric_namespaces = [
     # AI
@@ -151,7 +150,7 @@ locals {
 }
 
 resource "datadog_integration_aws_account" "datadog_integration" {
-  account_tags   = [for k, v in local.datadog_tags : "${k}:${v}"] # list(string) Tags to apply to all metrics in the account. 
+  # account_tags   = [for k, v in local.datadog_tags : "${k}:${v}" if v != null] # list(string) Tags to apply to all metrics in the account. 
   aws_account_id = var.aws_account_id
   aws_partition  = data.aws_partition.current.partition
 
