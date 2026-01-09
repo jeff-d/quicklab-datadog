@@ -88,6 +88,8 @@ resource "aws_iam_role" "datadog_aws_integration" {
   assume_role_policy = data.aws_iam_policy_document.datadog_aws_integration_assume_role.json
 
   tags = local.cloud_resource_tags
+
+  lifecycle { ignore_changes = [assume_role_policy] }
 }
 
 resource "aws_iam_role_policy_attachment" "datadog_aws_integration" {
@@ -105,9 +107,11 @@ resource "aws_iam_role_policy_attachment" "aws_managed_policies" {
 }
 
 locals {
-  # contains additional permissions required for Extended Resource Collection on additional Datadog Products
+
+  account_tags = []
+  # ReadOnlyAccess contains additional permissions required for Extended Resource Collection on additional Datadog Products
   # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
-  aws_managed_policies = ["SecurityAudit", "ReadOnlyAccess"]
+  aws_managed_policies = ["SecurityAudit"] # "ReadOnlyAccess"
 
 
   taggable_namespaces = ["AWS/ApplicationELB", "AWS/ELB", "AWS/EC2", "AWS/Lambda", "AWS/AmazonMQ", "AWS/Kafka", "AWS/NetworkELB", "AWS/RDS", "AWS/SQS", "AWS/States"]
@@ -146,11 +150,11 @@ locals {
     # auditing
     "AWS/CloudTrail", "AWS/IAM", "AWS/KMS",
   ]
-  autosubscribe_log_sources = ["cloudtrail"]
+  autosubscribe_log_sources = ["cloudtrail", "vpc"] # "apigw-access-logs", "apigw-execution-logs", "cloudtrail", "ecs", "eks", "elb", "elbv2", "ssm", "vpc"
 }
 
 resource "datadog_integration_aws_account" "datadog_integration" {
-  # account_tags   = [for k, v in local.datadog_tags : "${k}:${v}" if v != null] # list(string) Tags to apply to all metrics in the account. 
+  account_tags   = [for k, v in local.account_tags : "${k}:${v}" if v != null] # list(string) Tags to apply to all metrics in the account. 
   aws_account_id = var.aws_account_id
   aws_partition  = data.aws_partition.current.partition
 
@@ -199,21 +203,21 @@ resource "datadog_integration_aws_account" "datadog_integration" {
   }
 
   logs_config {
-
     lambda_forwarder {
-      lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)] # one function per region
-      sources = [for src in local.autosubscribe_log_sources : src if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, src)]
+      lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)]                                                                                              # one function per region
+      sources = [for source in local.autosubscribe_log_sources : source if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, source)] # allowed values in data.datadog_integration_aws_available_logs_services
 
-      # sources = ["s3"] # allowed values in data.datadog_integration_aws_available_logs_services
-      /*
       log_source_config {
-        tag_filters {
-          source = "s3"
-          tags   = ["env:prod", "team:backend"]
+        dynamic "tag_filters" {
+          for_each = local.autosubscribe_log_sources
+          iterator = source
+          content {
+            source = source.value
+            tags   = ["quicklab.io:lab-id:${var.uid}"]
+          }
         }
-      */
+      }
     }
-
   }
 
   traces_config {

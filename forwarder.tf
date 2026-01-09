@@ -29,13 +29,17 @@ module "datadog_forwarder" {
   exclude_at_match = null # (string) regex
 
   # Advanced
+
+  # tag 'enrichment' is done by the Datadog backend by default for S3 and Cloudwatch
+  # tag colisions can occur if AWS tags on the bucket or log group exist for Datadog reserved tag keys (e.g. service, env, host, team)  
+  # dd_enrich_s3_tags = false 
+  # dd_enrich_cloudwatch_tags    = false
+
   # tag 'fetching' is done by the Forwarder during transmission (increasaes Forwarder overhead)
-  # tag 'enrichment' is done by the Datadog backend
-  dd_enrich_s3_tags = false
-  # dd_enrich_cloudwatch_tags    = true 
   # dd_fetch_lambda_tags         = false
-  # dd_fetch_step_functions_tags = false
-  # dd_step_functions_trace_enabled = true #? verify is DISABLED by default
+
+  dd_step_functions_trace_enabled = true
+  dd_fetch_step_functions_tags    = true
 
   dd_store_failed_events          = true
   dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-forwarder-${data.aws_region.current.region}"
