@@ -3,9 +3,12 @@ module "datadog_forwarder" {
   version = "~> 1.0"
   tags    = local.cloud_resource_tags # tag the supported AWS resources created by this module
 
+
   # Parameters reference: https://docs.datadoghq.com/logs/guide/forwarder/?tab=manual#parameters
   dd_api_key = var.datadog_api_key
-  dd_site    = var.datadog_site
+  #! dd_api_key_secret_arn is interpolated (not referenced by resource id) because it must be != null at plan time to prevent the module from creating it's own secret
+  #! dd_api_key_secret_arn = "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.prefix}-${var.uid}-datadog-collection-api-key"
+  dd_site = var.datadog_site
 
   # Lambda function
   function_name         = "${var.prefix}-${var.uid}-datadog-forwarder"
@@ -19,7 +22,7 @@ module "datadog_forwarder" {
   dd_use_compression   = true
   dd_compression_level = 9
   # dd_multiline_log_regex_pattern = "\d{2}\/\d{2}\/\d{4}" # use to detect multi-line logs from S3 beginning with pattern “11/10/2014”
-  # dd_tags = join(",", [for k, v in var.datadog_tags : "${k}:${v}" if v != null]) # a comma-separated string of key:value pairs to tag the telemetry forwarded to Datadog.
+  # dd_tags = join(",", [for k, v in local.datadog_tags : "${k}:${v}" if v != null]) # a comma-separated string of key:value pairs to tag the telemetry forwarded to Datadog.
 
   # Log scrubbing
   redact_email = false
@@ -42,8 +45,8 @@ module "datadog_forwarder" {
   dd_fetch_step_functions_tags    = true
 
   dd_store_failed_events          = true
-  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-forwarder-${data.aws_region.current.region}"
+  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-collection-${data.aws_region.current.region}" #? how to treat as a prefix to name-collision provision failures
   dd_schedule_retry_failed_events = true
   # dd_schedule_retry_interval = 6 # (integer) default: 6
-  # tags_cache_ttl_seconds = 300 # (integer) default: 300
+  # tags_cache_ttl_seconds = 60 # (integer) default: 300
 }

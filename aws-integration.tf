@@ -83,6 +83,7 @@ resource "aws_iam_policy" "datadog_aws_integration" {
 }
 
 resource "aws_iam_role" "datadog_aws_integration" {
+  # cross-account role
   name               = var.integration_role_name != "DatadogIntegrationRole" ? var.integration_role_name : "${var.prefix}-${var.uid}-DatadogIntegrationRole"
   description        = "Role for Datadog AWS Integration"
   assume_role_policy = data.aws_iam_policy_document.datadog_aws_integration_assume_role.json
@@ -111,11 +112,17 @@ locals {
   account_tags = []
   # ReadOnlyAccess contains additional permissions required for Extended Resource Collection on additional Datadog Products
   # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
-  aws_managed_policies = ["SecurityAudit"] # "ReadOnlyAccess"
+  aws_managed_policies = ["SecurityAudit"] #? "ReadOnlyAccess"
 
 
   taggable_namespaces = ["AWS/ApplicationELB", "AWS/ELB", "AWS/EC2", "AWS/Lambda", "AWS/AmazonMQ", "AWS/Kafka", "AWS/NetworkELB", "AWS/RDS", "AWS/SQS", "AWS/States"]
   include_metric_namespaces = [
+    # auditing
+    "AWS/CloudTrail", "AWS/IAM", "AWS/KMS",
+
+    # common
+    "AWS/CertificateManager", "AWS/ACMPrivateCA",
+
     # AI
     "AWS/Bedrock/Guardrails", "AWS/ML", "AWS/SageMaker", "AWS/SageMaker/TrainingJobs",
 
@@ -140,16 +147,11 @@ locals {
     # events
     "AWS/Events", "AWS/SES", "AWS/SNS", "AWS/SQS",
 
-    # VDI
+    # desktop virtualization
     "AWS/WorkSpaces", "AWS/WorkSpacesWeb", "AWS/WorkSpacesThinClient", "AWS/WorkSpaces/Usage", "AWS/WorkSpaces/Pool",
     "AWS/WorkSpacesProtocol", "AWS/WorkSpaces/Status", "AWS/WorkSpaces/Session", "AWS/WorkSpacesWeb/Session", "AWS/WorkSpacesWeb/Portal",
-
-    # common
-    "AWS/CertificateManager", "AWS/ACMPrivateCA",
-
-    # auditing
-    "AWS/CloudTrail", "AWS/IAM", "AWS/KMS",
   ]
+
   autosubscribe_log_sources = ["cloudtrail", "vpc"] # "apigw-access-logs", "apigw-execution-logs", "cloudtrail", "ecs", "eks", "elb", "elbv2", "ssm", "vpc"
 }
 
@@ -164,7 +166,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
 
   auth_config {
     aws_auth_config_role {
-      role_name = var.integration_role_name != "DatadogIntegrationRole" ? var.integration_role_name : "${var.prefix}-${var.uid}-DatadogIntegrationRole" #* using aws_iam_role.datadog_aws_integration.name gives a tf cycle error
+      role_name = var.integration_role_name != "DatadogIntegrationRole" ? var.integration_role_name : "${var.prefix}-${var.uid}-DatadogIntegrationRole" # using aws_iam_role.datadog_aws_integration.name gives a tf cycle error
     }
   }
 
@@ -203,6 +205,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
   }
 
   logs_config {
+
     lambda_forwarder {
       lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)]                                                                                              # one function per region
       sources = [for source in local.autosubscribe_log_sources : source if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, source)] # allowed values in data.datadog_integration_aws_available_logs_services
@@ -217,6 +220,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
           }
         }
       }
+
     }
   }
 

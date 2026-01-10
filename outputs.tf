@@ -16,9 +16,16 @@ output "agent_endpoints" {
 output "org_name" {
   value = datadog_organization_settings.output.name
 }
+
 output "org_id" {
   value = datadog_organization_settings.output.id
 }
+
 output "org_public_id" {
   value = datadog_organization_settings.output.public_id
+}
+
+output "collection_bucket_name" {
+  description = "S3 Bucket where failed deliveries will be saved"
+  value       = module.datadog_forwarder.forwarder_bucket_name
 }

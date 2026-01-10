@@ -20,7 +20,7 @@ resource "aws_cloudtrail" "this" {
 
 # Bucket - store the logs
 resource "aws_s3_bucket" "trail" {
-  bucket_prefix = "${var.prefix}-${var.uid}-ct-${data.aws_region.current.region}-"
+  bucket_prefix = "${var.prefix}-${var.uid}-cloudtrail-${data.aws_region.current.region}-"
   force_destroy = true
   tags          = merge(local.cloud_resource_tags, { Name = "${var.prefix}-${var.uid}-cloudtrail" })
 }
