@@ -197,7 +197,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
       iterator = namespace
       content {
         namespace = namespace.value
-        tags      = ["quicklab.io:lab-id:${var.uid}"]
+        tags      = ["quicklab-id:${var.uid}"]
       }
     }
   }
@@ -213,7 +213,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
           iterator = source
           content {
             source = source.value
-            tags   = ["quicklab.io:lab-id:${var.uid}"]
+            tags   = ["quicklab-id:${var.uid}"]
           }
         }
       }
