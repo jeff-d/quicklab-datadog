@@ -5,13 +5,16 @@ module "datadog_forwarder" {
 
 
   # Parameters reference: https://docs.datadoghq.com/logs/guide/forwarder/?tab=manual#parameters
-  dd_api_key = var.datadog_api_key
-  #! dd_api_key_secret_arn is interpolated (not referenced by resource id) because it must be != null at plan time to prevent the module from creating it's own secret
-  #! dd_api_key_secret_arn = "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.prefix}-${var.uid}-datadog-collection-api-key"
-  dd_site = var.datadog_site
+  #! dd_api_key_secret_arn = module.datadog_secrets["api-key-forwarder"].secret_arn 
+  #! can't be referenced (via module.datadog_secrets["api-key-forwarder"].secret_arn) so datadog_forwarder module knows whether to create a "aws_secretsmanager_secret" "dd_api_key_secret" at plan time
+  #! can't be interpolated (by constructing an arn) because secret arns add a unique string on the end of secret name that can't be known in advance
+  #! dd_api_key_secret_arn = 
+  dd_api_key = var.datadog_api_key #! let the module make it's own secret for the forwarder to solve the above BYO secret problem
+  dd_site    = var.datadog_site
 
   # Lambda function
   function_name         = "${var.prefix}-${var.uid}-datadog-forwarder"
+  layer_version         = "93" # default: "latest" #! 94 is broken due to python 3.14 upgrade: https://github.com/DataDog/terraform-aws-log-lambda-forwarder-datadog/pull/22
   reserved_concurrency  = 10
   log_retention_in_days = 1
   dd_max_workers        = null   # (string)
@@ -45,7 +48,7 @@ module "datadog_forwarder" {
   dd_fetch_step_functions_tags    = true
 
   dd_store_failed_events          = true
-  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-collection-${data.aws_region.current.region}" #? how to treat as a prefix to name-collision provision failures
+  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-forwarder-${data.aws_region.current.region}" #? how to treat as a prefix to avoid name-collision provision failures
   dd_schedule_retry_failed_events = true
   # dd_schedule_retry_interval = 6 # (integer) default: 6
   # tags_cache_ttl_seconds = 60 # (integer) default: 300

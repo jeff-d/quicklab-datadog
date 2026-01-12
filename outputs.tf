@@ -6,7 +6,13 @@
 
 data "datadog_ip_ranges" "org" {}
 
-resource "datadog_organization_settings" "output" {
+resource "datadog_organization_settings" "this" {
+  # no settings configured
+  # this resource is used only to read settings and populate terraform outputs
+
+  lifecycle {
+    ignore_changes = [name]
+  }
 }
 
 output "agent_endpoints" {
@@ -14,15 +20,15 @@ output "agent_endpoints" {
 }
 
 output "org_name" {
-  value = datadog_organization_settings.output.name
+  value = datadog_organization_settings.this.name
 }
 
 output "org_id" {
-  value = datadog_organization_settings.output.id
+  value = datadog_organization_settings.this.id
 }
 
 output "org_public_id" {
-  value = datadog_organization_settings.output.public_id
+  value = datadog_organization_settings.this.public_id
 }
 
 output "collection_bucket_name" {
