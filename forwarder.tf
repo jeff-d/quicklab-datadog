@@ -7,7 +7,7 @@ module "datadog_forwarder" {
   # Parameters reference: https://docs.datadoghq.com/logs/guide/forwarder/?tab=manual#parameters
   #! dd_api_key_secret_arn = module.datadog_secrets["api-key-forwarder"].secret_arn 
   #! can't be referenced (via module.datadog_secrets["api-key-forwarder"].secret_arn) so datadog_forwarder module knows whether to create a "aws_secretsmanager_secret" "dd_api_key_secret" at plan time
-  #! can't be interpolated (by constructing an arn) because secret arns add a unique string on the end of secret name that can't be known in advance
+  #! can't be interpolated from (by constructing an arn) because secret arns add a unique string on the end of secret name that can't be known in advance
   #! dd_api_key_secret_arn = 
   dd_api_key = var.datadog_api_key #! let the module make it's own secret for the forwarder to solve the above BYO secret problem
   dd_site    = var.datadog_site
@@ -39,7 +39,7 @@ module "datadog_forwarder" {
   # tag 'enrichment' is done by the Datadog backend by default for S3 and Cloudwatch
   # tag colisions can occur if AWS tags on the bucket or log group exist for Datadog reserved tag keys (e.g. service, env, host, team)  
   # dd_enrich_s3_tags = false 
-  # dd_enrich_cloudwatch_tags    = false
+  dd_enrich_cloudwatch_tags = true
 
   # tag 'fetching' is done by the Forwarder during transmission (increasaes Forwarder overhead)
   # dd_fetch_lambda_tags         = false

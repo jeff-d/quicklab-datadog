@@ -107,12 +107,33 @@ resource "aws_iam_role_policy_attachment" "aws_managed_policies" {
   policy_arn = "arn:aws:iam::aws:policy/${each.value}"
 }
 
+resource "aws_iam_role_policy_attachment" "datadog_actions" {
+  role       = aws_iam_role.datadog_aws_integration.name
+  policy_arn = aws_iam_policy.datadog_actions.arn
+}
+
+resource "aws_iam_policy" "datadog_actions" {
+  # enables actions connection to read Datadog API & App keys in AWS Secrets Manager
+  name   = "${var.prefix}-${var.uid}-${local.module}-actions-policy"
+  policy = data.aws_iam_policy_document.datadog_secrets.json
+  tags   = local.cloud_resource_tags
+}
+
+data "aws_iam_policy_document" "datadog_secrets" {
+  statement {
+    sid       = "ReadDatadogSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.prefix}-${var.uid}-${local.module}*"]
+  }
+}
+
 locals {
 
   account_tags = []
   # ReadOnlyAccess contains additional permissions required for Extended Resource Collection on additional Datadog Products
   # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
-  aws_managed_policies = ["SecurityAudit"] #? "ReadOnlyAccess"
+  aws_managed_policies = ["SecurityAudit"] #? "ReadOnlyAccess" #? "ViewOnlyAccess" #? "SecretsManagerReadWrite"
 
 
   taggable_namespaces = ["AWS/ApplicationELB", "AWS/ELB", "AWS/EC2", "AWS/Lambda", "AWS/AmazonMQ", "AWS/Kafka", "AWS/NetworkELB", "AWS/RDS", "AWS/SQS", "AWS/States"]

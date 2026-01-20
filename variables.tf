@@ -16,6 +16,8 @@ variable "uid" {
   default     = null
 }
 
+variable "vpc_id" { type = string }
+
 variable "datadog_api_key" { type = string }
 
 variable "datadog_app_key" { type = string }
@@ -40,6 +42,12 @@ variable "integration_role_name" {
   default     = "DatadogIntegrationRole"
 }
 
+variable "create_server" {
+  type        = bool
+  description = "A flag flag for resource creation. Set to \"true\" to enable."
+  default     = false
+}
+
 variable "server_os" {
   type        = list(string)
   description = "A flag to set the operating system the Quicklab server(s)"
@@ -48,4 +56,16 @@ variable "server_os" {
     condition     = can(contains(["linux", "windows"], var.server_os))
     error_message = "These list items must be \"linux\" and/or \"windows\" (case-sensitive)."
   }
+}
+
+variable "create_cluster" {
+  type        = bool
+  description = "A flag for resource creation. Set to \"true\" to enable."
+  default     = false
+}
+
+variable "create_byoc_k8s_deployments" {
+  type        = bool
+  description = "A flag for 'bring your own cloud' kubernetes deployment creation (Datadog Observability Pipelines and Datadog CloudPrem). Set to \"true\" to enable."
+  default     = false
 }

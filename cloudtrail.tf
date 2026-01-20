@@ -22,7 +22,12 @@ resource "aws_cloudtrail" "this" {
 resource "aws_s3_bucket" "trail" {
   bucket_prefix = "${var.prefix}-${var.uid}-cloudtrail-${data.aws_region.current.region}-"
   force_destroy = true
-  tags          = merge(local.cloud_resource_tags, { Name = "${var.prefix}-${var.uid}-cloudtrail" })
+  tags = merge(local.cloud_resource_tags,
+    {
+      Name    = "${var.prefix}-${var.uid}-cloudtrail"
+      service = "cloudtrail"
+    }
+  )
 }
 
 resource "aws_s3_bucket_public_access_block" "trail" {

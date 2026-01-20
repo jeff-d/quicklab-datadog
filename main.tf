@@ -14,7 +14,7 @@ data "aws_region" "current" {}
 locals {
   module              = "datadog"
   cloud_resource_tags = merge(var.cloud_resource_tags, {})
-  datadog_tags        = merge(var.datadog_tags, {})
+  datadog_tags        = merge(var.datadog_tags, { "quicklab-id" = var.uid })
   datadog_secrets = {
     api_keys = ["agent-installation", "workflow-automation"] # "forwarder" #! module.datadog_forwarder creates its own key
     app_keys = ["workflow-automation"]
@@ -53,14 +53,18 @@ module "datadog_secrets" {
   recovery_window_in_days = 0
   secret_string           = startswith(each.key, "app-key") ? datadog_application_key.this[each.value].key : datadog_api_key.this[each.value].key
   block_public_policy     = true
-  source_policy_documents = [data.aws_iam_policy_document.secret_resource_policy.json]
+  #? source_policy_documents = [data.aws_iam_policy_document.secret_resource_policy.json]
 
   tags = { Name = "${var.prefix}-${var.uid}-${local.module}-${each.key}-secret" }
 }
 
+/*
+
+#! UNUSED
+
 data "aws_iam_policy_document" "secret_resource_policy" {
   statement {
-    sid    = "EnableActionConnectionToReadSecrets"
+    sid    = "DatadogActionsReadSecrets"
     effect = "Allow"
 
     principals {
@@ -73,6 +77,6 @@ data "aws_iam_policy_document" "secret_resource_policy" {
   }
 }
 
-
+*/
 
 
