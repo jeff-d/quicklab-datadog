@@ -76,7 +76,7 @@ resource "datadog_action_connection" "http" {
     }
   }
 
-  # lifecycle { ignore_changes = [http] } #! suppresses supurious plan drift but prevents detection of actual token change
+  lifecycle { ignore_changes = [http] } #! suppresses supurious plan diff, but prevents detection of actual token change (must ignore whole http object due to lack of support for splat or index expressions)
 }
 
 # Workflow creates Fleet Automation configuration deployment
@@ -141,6 +141,7 @@ resource "datadog_workflow_automation" "agent_config" {
                         }
                         logs_enabled = true
                         logs_config = {
+                          # logs_dd_url                  = try("https://${data.aws_lb.cloudprem_ingress[0].dns_name}", null) #! (Feb, 2026) setting logs_dd_url is not supported in fleet automation: https://github.com/DataDog/dd-source/blob/main/domains/remote-config/shared/libs/config-validator/schemas/INSTALLER_CONFIG/datadog.json
                           file_wildcard_selection_mode = "by_modification_time"
                         }
                       }

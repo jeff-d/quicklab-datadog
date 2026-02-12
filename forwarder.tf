@@ -48,7 +48,7 @@ module "datadog_forwarder" {
   dd_fetch_step_functions_tags    = true
 
   dd_store_failed_events          = true
-  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-datadog-forwarder-${data.aws_region.current.region}" #? how to treat as a prefix to avoid name-collision provision failures
+  dd_forwarder_bucket_name        = "${var.prefix}-${var.uid}-${local.module}-forwarder-${data.aws_region.current.region}" #? how to treat as a prefix to avoid name-collision provision failures
   dd_schedule_retry_failed_events = true
   # dd_schedule_retry_interval = 6 # (integer) default: 6
   # tags_cache_ttl_seconds = 60 # (integer) default: 300

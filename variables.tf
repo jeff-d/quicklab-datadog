@@ -58,14 +58,16 @@ variable "server_os" {
   }
 }
 
-variable "create_cluster" {
-  type        = bool
-  description = "A flag for resource creation. Set to \"true\" to enable."
-  default     = false
-}
+variable "cluster_name" { type = string }
 
 variable "create_byoc_k8s_deployments" {
   type        = bool
   description = "A flag for 'bring your own cloud' kubernetes deployment creation (Datadog Observability Pipelines and Datadog CloudPrem). Set to \"true\" to enable."
   default     = false
+}
+
+variable "cloudprem_retention" {
+  type        = number
+  default     = 30
+  description = "Number of days to retain logs in a Datadog CloudPrem index. Applies both to the CloudPrem Cluster's retention settings and the AWS S3 Bucket's lifecycle configuration."
 }

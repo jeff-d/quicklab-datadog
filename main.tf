@@ -16,7 +16,7 @@ locals {
   cloud_resource_tags = merge(var.cloud_resource_tags, {})
   datadog_tags        = merge(var.datadog_tags, { "quicklab-id" = var.uid })
   datadog_secrets = {
-    api_keys = ["agent-installation", "workflow-automation"] # "forwarder" #! module.datadog_forwarder creates its own key
+    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
     app_keys = ["workflow-automation"]
   }
 }
