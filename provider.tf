@@ -1,4 +1,4 @@
-# This file is part of QuickLab, which creates simple, monitored labs.
+# This file is part of QuickLab, which creates simple, observable labs.
 # https://github.com/jeff-d/quicklab
 #
 # SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>

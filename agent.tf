@@ -1,6 +1,6 @@
 # install datadog agent via configuration management
 resource "aws_ssm_association" "server_install" {
-  for_each         = var.create_server ? toset(var.server_os) : []
+  for_each         = var.create_server && !var.server_otelcol ? toset(var.server_os) : []
   name             = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}:865078226113:document/datadog-agent-installation-${each.value}"
   association_name = "datadog-agent-installation-${each.value}_${var.prefix}-${var.uid}"
   parameters = merge(
@@ -81,7 +81,7 @@ resource "datadog_action_connection" "http" {
 
 # Workflow creates Fleet Automation configuration deployment
 resource "datadog_workflow_automation" "agent_config" {
-  count       = var.create_server ? 1 : 0
+  count       = var.create_server && !var.server_otelcol ? 1 : 0
   name        = "Manage Datadog Agent Configuration"
   description = "Updates the configuration of scoped Datadog Agents on a schedule via a Fleet Automation configuration deployment."
   published   = true
@@ -197,8 +197,8 @@ resource "datadog_workflow_automation" "agent_config" {
 }
 
 # Audit Trail Monitor to trigger Workflow
-resource "datadog_monitor" "new_agent" {
-  count = var.create_server ? 1 : 0
+resource "datadog_monitor" "new_datadog_agent" {
+  count = var.create_server && !var.server_otelcol ? 1 : 0
 
   name             = "New Datadog Agent Installed"
   type             = "audit alert"
@@ -211,7 +211,7 @@ resource "datadog_monitor" "new_agent" {
   # .rollup("count").by(\"@metadata.host_metadata.hostname\").last("1m") > 0 
   # .rollup("count").last("1m") > 0 
   query = <<EOT
-            audits("@evt.name:\"Datadog Agent\" @action:created status:info").rollup("count").by("@metadata.host_metadata.hostname").last("1m") > 0 
+            audits("@evt.name:\"Datadog Agent\" @metadata.event_name:\"Agent Installed\" @action:created status:info !@metadata.agent_metadata.install_method_tool:datadog-operator").rollup("count").by("@metadata.host_metadata.hostname").last("1m") > 0 
           EOT
 
   # wrapping message in monitor variables prevents additional workflow trigger on Monitor recovery

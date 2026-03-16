@@ -1,4 +1,4 @@
-# This file is part of QuickLab, which creates simple, monitored labs.
+# This file is part of QuickLab, which creates simple, observable labs.
 # https://github.com/jeff-d/quicklab
 #
 # SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
@@ -16,8 +16,8 @@ locals {
   cloud_resource_tags = merge(var.cloud_resource_tags, {})
   datadog_tags        = merge(var.datadog_tags, { "quicklab-id" = var.uid })
   datadog_secrets = {
-    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
-    app_keys = ["workflow-automation"]
+    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], length(var.cluster_name) > 0 ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
+    app_keys = concat(["workflow-automation"], length(var.cluster_name) > 0 ? ["kubernetes-operator"] : [])
   }
 }
 
