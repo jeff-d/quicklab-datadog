@@ -1,3 +1,10 @@
+# This file is part of QuickLab, which creates simple, observable labs.
+# https://github.com/jeff-d/quicklab
+#
+# SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+
 locals {
   datadog_operator_helm_chart_version = "2.19.1" # corresponds to App version 1.24.0
   datadog_operator_helm_release_name  = "datadog-operator"
