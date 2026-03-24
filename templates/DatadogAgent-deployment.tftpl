@@ -11,6 +11,77 @@ spec:
     credentials:
       apiKey: ${DATADOG_API_KEY}
       appKey: ${DATADOG_APP_KEY}
+  features:
+    # Reference: https://github.com/DataDog/datadog-operator/blob/main/examples/datadogagent/datadog-agent-all.yaml
+    logCollection:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.logCollection}
+      containerCollectAll: ${DATADOG_AGENT_DEPLOYMENT.features.logCollectionContainerAll}
+    liveProcessCollection:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.liveProcessCollection}
+    liveContainerCollection:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.liveContainerCollection}
+    processDiscovery:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.processDiscovery}
+    oomKill:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.oomKill}
+    tcpQueueLength:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.tcpQueueLength}
+    ebpfCheck:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.ebpfCheck}
+    apm:
+      instrumentation:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.apm}
+    asm:
+      threats:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.asmThreats}
+      sca:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.asmSca}
+      iast:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.asmIast}
+    cspm:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.cspm}
+    cws:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.cws}
+    npm:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.npm}
+    usm:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.usm}
+    dogstatsd:
+      unixDomainSocketConfig:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.dogstatsdUnixDomainSocket}
+    otlp:
+      receiver:
+        protocols:
+          grpc:
+            enabled: ${DATADOG_AGENT_DEPLOYMENT.features.otlpGrpc}
+    remoteConfiguration:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.remoteConfiguration}
+    sbom:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.sbom}
+      containerImage:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.sbomContainerImage}
+      host:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.sbomHost}
+    serviceDiscovery:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.serviceDiscovery}
+      networkStats:
+        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.serviceDiscoveryNetworkStats}
+    gpu:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.gpu}
+    eventCollection:
+      collectKubernetesEvents: ${DATADOG_AGENT_DEPLOYMENT.features.collectKubernetesEvents}
+    orchestratorExplorer:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.orchestratorExplorer}
+    kubeStateMetricsCore:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.kubeStateMetricsCore}
+    admissionController:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.admissionController}
+    externalMetricsServer:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.externalMetricsServer}
+    clusterChecks:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.clusterChecks}
+    prometheusScrape:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.prometheusScrape}
   override:
     nodeAgent:
       tolerations:

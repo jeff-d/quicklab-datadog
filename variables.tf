@@ -52,7 +52,11 @@ variable "server_otelcol" {
   description = "Bootstrap QuickLab servers with the OpenTelemetry Collector (agent)."
   default     = false
 }
-variable "cluster_name" { type = string }
+variable "cluster_name" {
+  type        = string
+  default     = null
+  description = "Name of the EKS cluster to integrate with Datadog. Set to null (or omit) when no QuickLab cluster is provisioned."
+}
 variable "create_byoc_k8s_deployments" {
   type        = bool
   description = "A flag for 'bring your own cloud' kubernetes deployment creation (Datadog Observability Pipelines and Datadog CloudPrem). Set to \"true\" to enable."
@@ -60,6 +64,11 @@ variable "create_byoc_k8s_deployments" {
 }
 variable "cloudprem_retention" {
   type        = number
-  default     = 30
+  default     = 7
   description = "Number of days to retain logs in a Datadog CloudPrem index. Applies both to the CloudPrem Cluster's retention settings and the AWS S3 Bucket's lifecycle configuration."
+}
+variable "enable_cloud_security" {
+  type        = bool
+  description = "Enable Datadog Cloud Security products. Set to \"true\" to enable."
+  default     = false
 }

@@ -26,7 +26,7 @@ locals {
 }
 
 resource "local_file" "cloudprem_values" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   content = templatefile(
     "${path.module}/templates/cloudprem-values.tftpl",
@@ -47,7 +47,7 @@ resource "local_file" "cloudprem_values" {
 }
 
 resource "helm_release" "cloudprem" {
-  count      = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   depends_on = [terraform_data.cloudprem_secrets, module.cloudprem_db, local_file.cloudprem_values]
 
   name       = local.cloudprem.helm_release
@@ -67,7 +67,7 @@ resource "helm_release" "cloudprem" {
 }
 
 resource "terraform_data" "cloudprem_secrets" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   # depends_on       = [module.quicklab_cluster, helm_release.karpenter] 
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
 
@@ -93,7 +93,7 @@ resource "terraform_data" "cloudprem_secrets" {
 }
 
 module "cloudprem_db" {
-  count   = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count   = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   source  = "terraform-aws-modules/rds/aws"
   version = "~> 6.0"
 
@@ -125,12 +125,12 @@ module "cloudprem_db" {
 }
 
 resource "random_password" "cloudprem_db" {
-  count  = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count  = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   length = 8
 }
 
 module "cloudprem_security_group" {
-  count   = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count   = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.3.1"
 
@@ -153,7 +153,7 @@ module "cloudprem_security_group" {
 }
 
 resource "aws_s3_bucket" "cloudprem" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   bucket        = "${var.prefix}-${var.uid}-${local.module}-cloudprem-${data.aws_region.current.region}"
   force_destroy = true
@@ -167,7 +167,7 @@ resource "aws_s3_bucket" "cloudprem" {
 }
 
 resource "aws_s3_bucket_public_access_block" "cloudprem" {
-  count  = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count  = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   bucket = aws_s3_bucket.cloudprem[0].id
 
   block_public_acls       = true
@@ -177,7 +177,7 @@ resource "aws_s3_bucket_public_access_block" "cloudprem" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "cloudprem" {
-  count  = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count  = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   bucket = aws_s3_bucket.cloudprem[0].id
 
   rule {
@@ -189,7 +189,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudprem" {
 }
 
 resource "aws_iam_policy" "cloudprem" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   name        = "${var.prefix}-${var.uid}-${local.module}-cloudprem-policy"
   path        = "/"
@@ -227,7 +227,7 @@ resource "aws_iam_policy" "cloudprem" {
 }
 
 resource "aws_iam_role" "cloudprem_pod_identity" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   name = "${var.prefix}-${var.uid}-${local.module}-cloudprem-pod-identity-role"
 
@@ -251,14 +251,14 @@ resource "aws_iam_role" "cloudprem_pod_identity" {
 }
 
 resource "aws_iam_role_policy_attachment" "cloudprem" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   policy_arn = aws_iam_policy.cloudprem[0].arn
   role       = aws_iam_role.cloudprem_pod_identity[0].name
 }
 
 resource "aws_eks_pod_identity_association" "cloudprem" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   cluster_name    = var.cluster_name
   namespace       = local.cloudprem.namespace
@@ -269,7 +269,7 @@ resource "aws_eks_pod_identity_association" "cloudprem" {
 }
 
 data "aws_lb" "cloudprem_ingress" {
-  count = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? 1 : 0
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
   tags = {
     "elbv2.k8s.aws/cluster"    = var.cluster_name

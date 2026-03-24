@@ -49,5 +49,5 @@ output "cloudprem_ingress_endpoint" {
 
 output "cloudprem_indexer_endpoint" {
   description = "The internal Kubernetes service endpoint for the Cloudprem indexer"
-  value       = length(var.cluster_name) > 0 && var.create_byoc_k8s_deployments ? "http://${local.cloudprem.helm_release}-indexer.${local.cloudprem.namespace}.svc.cluster.local:7280" : null
+  value       = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? "http://${local.cloudprem.helm_release}-indexer.${local.cloudprem.namespace}.svc.cluster.local:7280" : null
 }

@@ -15,9 +15,14 @@ locals {
   module              = "datadog"
   cloud_resource_tags = merge(var.cloud_resource_tags, {})
   datadog_tags        = merge(var.datadog_tags, { "quicklab-id" = var.uid })
+
+  # Null-safe check: var.cluster_name may be null when the parent module
+  # disables the cluster component (var.create_cluster = false).
+  quicklab_cluster_enabled = var.cluster_name != null && length(var.cluster_name) > 0
+
   datadog_secrets = {
-    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], length(var.cluster_name) > 0 ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
-    app_keys = concat(["workflow-automation"], length(var.cluster_name) > 0 ? ["kubernetes-operator"] : [])
+    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
+    app_keys = concat(["workflow-automation"], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
   }
 }
 

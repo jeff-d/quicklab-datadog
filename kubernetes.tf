@@ -19,17 +19,63 @@ locals {
 
     introspection       = { enabled = true }
     remoteConfiguration = { enabled = true }
+    datadogSLO          = { enabled = false } # default: false
+
+    datadogCRDs = {
+      crds = {
+        # datadogCRDs.crds.datadogSLOs -- Set to true to deploy the DatadogSLO CRD
+        datadogSLOs : false # default: false
+      }
+    }
 
     tolerations = [{
       key      = "karpenter.sh/controller"
       operator = "Exists"
       effect   = "NoSchedule"
     }]
+
+  }
+
+  datadog_agent_deployment = {
+    features = {
+      logCollection                = true
+      logCollectionContainerAll    = true
+      liveProcessCollection        = true
+      liveContainerCollection      = true
+      processDiscovery             = true
+      oomKill                      = true
+      tcpQueueLength               = true
+      ebpfCheck                    = false
+      apm                          = true
+      asmThreats                   = true
+      asmSca                       = true
+      asmIast                      = true
+      cspm                         = var.enable_cloud_security
+      cws                          = var.enable_cloud_security
+      npm                          = true
+      usm                          = true
+      dogstatsdUnixDomainSocket    = true
+      otlpGrpc                     = false
+      remoteConfiguration          = true
+      sbom                         = true
+      sbomContainerImage           = true
+      sbomHost                     = true
+      serviceDiscovery             = true
+      serviceDiscoveryNetworkStats = true
+      gpu                          = false
+      collectKubernetesEvents      = true
+      orchestratorExplorer         = true
+      kubeStateMetricsCore         = true
+      admissionController          = true
+      externalMetricsServer        = true
+      clusterChecks                = true
+      prometheusScrape             = false
+    }
   }
 }
 
 resource "helm_release" "datadog_operator" {
-  count = length(var.cluster_name) > 0 ? 1 : 0
+  count = local.quicklab_cluster_enabled ? 1 : 0
 
   name       = local.datadog_operator_helm_release_name
   repository = "https://helm.datadoghq.com/" # https://artifacthub.io/packages/helm/datadog/"
@@ -46,7 +92,7 @@ resource "helm_release" "datadog_operator" {
 }
 
 resource "local_file" "datadog_agent_manifest" {
-  count = length(var.cluster_name) > 0 ? 1 : 0
+  count = local.quicklab_cluster_enabled ? 1 : 0
 
   content = templatefile(
     "${path.module}/templates/DatadogAgent-deployment.tftpl",
@@ -54,7 +100,8 @@ resource "local_file" "datadog_agent_manifest" {
       DATADOG_OPERATOR_NAMESPACE = local.datadog_operator_namespace
       DATADOG_SITE               = var.datadog_site
       DATADOG_API_KEY            = try(datadog_api_key.this["kubernetes-operator"].key, null)
-      DATADOG_APP_KEY            = try(datadog_api_key.this["kubernetes-operator"].key, null)
+      DATADOG_APP_KEY            = try(datadog_application_key.this["kubernetes-operator"].key, null)
+      DATADOG_AGENT_DEPLOYMENT   = local.datadog_agent_deployment
     }
   )
   filename        = "${path.module}/templates/DatadogAgent-deployment.yaml"
@@ -62,7 +109,7 @@ resource "local_file" "datadog_agent_manifest" {
 }
 
 resource "terraform_data" "datadog_agent_manifest" {
-  count = length(var.cluster_name) > 0 ? 1 : 0
+  count = local.quicklab_cluster_enabled ? 1 : 0
   depends_on = [
     helm_release.datadog_operator,
     local_file.datadog_agent_manifest

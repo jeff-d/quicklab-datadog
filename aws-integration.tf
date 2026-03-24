@@ -192,7 +192,7 @@ resource "datadog_integration_aws_account" "datadog_integration" {
   }
 
   resources_config {
-    cloud_security_posture_management_collection = false
+    cloud_security_posture_management_collection = var.enable_cloud_security
     extended_collection                          = true # required for cloud_security_posture_management_collection
   }
 
