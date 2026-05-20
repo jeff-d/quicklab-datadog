@@ -21,7 +21,7 @@ locals {
   quicklab_cluster_enabled = var.cluster_name != null && length(var.cluster_name) > 0
 
   datadog_secrets = {
-    api_keys = concat(["agent-installation", "workflow-automation"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
+    api_keys = concat(["agent-installation", "workflow-automation", "log-forwarder"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
     app_keys = concat(["workflow-automation"], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
   }
 }
@@ -53,11 +53,12 @@ module "datadog_secrets" {
   source  = "terraform-aws-modules/secrets-manager/aws"
   version = "~> 2.1.0"
 
-  name                    = "${var.prefix}-${var.uid}-${local.module}-${each.key}"
-  description             = "Datadog ${startswith(each.key, "app-key") ? "Application" : "API"} Key: ${each.value}"
-  recovery_window_in_days = 0
-  secret_string           = startswith(each.key, "app-key") ? datadog_application_key.this[each.value].key : datadog_api_key.this[each.value].key
-  block_public_policy     = true
+  name                     = "${var.prefix}-${var.uid}-${local.module}-${each.key}"
+  description              = "Datadog ${startswith(each.key, "app-key") ? "Application" : "API"} Key: ${each.value}"
+  recovery_window_in_days  = 0
+  secret_string_wo         = startswith(each.key, "app-key") ? datadog_application_key.this[each.value].key : datadog_api_key.this[each.value].key
+  secret_string_wo_version = 1 # increment to manually rotate on next apply (rare, as secrets will be removed and replaced when changing var.observability_backend)
+  block_public_policy      = true
   #? source_policy_documents = [data.aws_iam_policy_document.secret_resource_policy.json]
 
   tags = { Name = "${var.prefix}-${var.uid}-${local.module}-${each.key}-secret" }

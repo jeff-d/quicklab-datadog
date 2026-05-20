@@ -1,8 +1,11 @@
 data "aws_vpc" "quicklab" {
-  id = var.vpc_id
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  id    = var.vpc_id
 }
 
 data "aws_subnets" "private" {
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+
   filter {
     name   = "vpc-id"
     values = [var.vpc_id]
@@ -111,9 +114,9 @@ module "cloudprem_db" {
   password                    = random_password.cloudprem_db[0].result
   manage_master_user_password = false # disable automatic password rotation via Secrets Manager
 
-  db_subnet_group_name   = data.aws_vpc.quicklab.id
+  db_subnet_group_name   = data.aws_vpc.quicklab[0].id
   create_db_subnet_group = true
-  subnet_ids             = data.aws_subnets.private.ids # []
+  subnet_ids             = data.aws_subnets.private[0].ids # []
   vpc_security_group_ids = [module.cloudprem_security_group[0].security_group_id]
 
   backup_retention_period = 0
@@ -145,7 +148,7 @@ module "cloudprem_security_group" {
       to_port     = 5432
       protocol    = "tcp"
       description = "PostgreSQL access from within VPC"
-      cidr_blocks = data.aws_vpc.quicklab.cidr_block
+      cidr_blocks = data.aws_vpc.quicklab[0].cidr_block
     },
   ]
 

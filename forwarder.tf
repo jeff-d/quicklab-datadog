@@ -8,9 +8,12 @@ module "datadog_forwarder" {
   #! dd_api_key_secret_arn = module.datadog_secrets["api-key-forwarder"].secret_arn 
   #! can't be referenced (via module.datadog_secrets["api-key-forwarder"].secret_arn) so datadog_forwarder module knows whether to create a "aws_secretsmanager_secret" "dd_api_key_secret" at plan time
   #! can't be interpolated from (by constructing an arn) because secret arns add a unique string on the end of secret name that can't be known in advance
-  #! dd_api_key_secret_arn = 
-  dd_api_key = var.datadog_api_key #! let the module make it's own secret for the forwarder to solve the above BYO secret problem
-  dd_site    = var.datadog_site
+
+  create_dd_api_key_secret = false
+  dd_api_key_secret_arn    = module.datadog_secrets["log-forwarder"].secret_arn
+
+  # dd_api_key = var.datadog_api_key #! let the module make it's own secret for the forwarder to solve the above BYO secret problem
+  dd_site = var.datadog_site
 
   # Lambda function
   function_name         = "${var.prefix}-${var.uid}-datadog-forwarder"
