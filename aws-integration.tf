@@ -130,7 +130,7 @@ data "aws_iam_policy_document" "datadog_secrets" {
 
 locals {
 
-  account_tags = []
+  account_tags = [for k, v in var.datadog_tags : "${k}:${v}" if v != null]
   # ReadOnlyAccess contains additional permissions required for Extended Resource Collection on additional Datadog Products
   # https://docs.datadoghq.com/integrations/amazon-web-services/#resource-types-and-permissions
   aws_managed_policies = ["SecurityAudit"] #? "ReadOnlyAccess" #? "ViewOnlyAccess" #? "SecretsManagerReadWrite"
@@ -172,12 +172,10 @@ locals {
     "AWS/WorkSpaces", "AWS/WorkSpacesWeb", "AWS/WorkSpacesThinClient", "AWS/WorkSpaces/Usage", "AWS/WorkSpaces/Pool",
     "AWS/WorkSpacesProtocol", "AWS/WorkSpaces/Status", "AWS/WorkSpaces/Session", "AWS/WorkSpacesWeb/Session", "AWS/WorkSpacesWeb/Portal",
   ]
-
-  autosubscribe_log_sources = ["cloudtrail", "vpc"] # "apigw-access-logs", "apigw-execution-logs", "cloudtrail", "ecs", "eks", "elb", "elbv2", "ssm", "vpc"
 }
 
 resource "datadog_integration_aws_account" "datadog_integration" {
-  account_tags   = [for k, v in local.account_tags : "${k}:${v}" if v != null] # list(string) Tags to apply to all metrics in the account. 
+  account_tags   = local.account_tags # list(string) Tags to apply to all metrics in the account.
   aws_account_id = data.aws_caller_identity.current.account_id
   aws_partition  = data.aws_partition.current.partition
 
@@ -228,12 +226,12 @@ resource "datadog_integration_aws_account" "datadog_integration" {
   logs_config {
 
     lambda_forwarder {
-      lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)]                                                                                              # one function per region
-      sources = [for source in local.autosubscribe_log_sources : source if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, source)] # allowed values in data.datadog_integration_aws_available_logs_services
+      lambdas = [try(module.datadog_forwarder.datadog_forwarder_arn, null)]                                                                                            # one function per region
+      sources = [for source in var.autosubscribe_log_sources : source if contains(data.datadog_integration_aws_available_logs_services.all.aws_logs_services, source)] # allowed values in data.datadog_integration_aws_available_logs_services
 
       log_source_config {
         dynamic "tag_filters" {
-          for_each = local.autosubscribe_log_sources
+          for_each = var.autosubscribe_log_sources
           iterator = source
           content {
             source = source.value

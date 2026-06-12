@@ -15,8 +15,6 @@ variable "uid" {
   default     = null
 }
 variable "vpc_id" { type = string }
-variable "datadog_api_key" { type = string }
-variable "datadog_app_key" { type = string }
 variable "datadog_site" { type = string }
 variable "cloud_resource_tags" {
   description = "A map of tags to add to all clous resources"
@@ -32,6 +30,11 @@ variable "integration_role_name" {
   type        = string
   description = "The name of the cross-account IAM role used for the Datadog AWS Account integration."
   default     = "DatadogIntegrationRole"
+}
+variable "autosubscribe_log_sources" {
+  type        = list(string)
+  description = "A list of log-ready AWS services to autosubscribe to the Datadog Forwarder lambda function."
+  default     = []
 }
 variable "create_server" {
   type        = bool

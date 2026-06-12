@@ -21,7 +21,7 @@ locals {
   quicklab_cluster_enabled = var.cluster_name != null && length(var.cluster_name) > 0
 
   datadog_secrets = {
-    api_keys = concat(["agent-installation", "workflow-automation", "log-forwarder"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : []) # "forwarder" #! module.datadog_forwarder creates its own key
+    api_keys = concat(["agent-installation", "workflow-automation", "log-forwarder"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
     app_keys = concat(["workflow-automation"], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
   }
 }
