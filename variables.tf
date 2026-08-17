@@ -70,6 +70,11 @@ variable "cloudprem_retention" {
   default     = 7
   description = "Number of days to retain logs in a Datadog CloudPrem index. Applies both to the CloudPrem Cluster's retention settings and the AWS S3 Bucket's lifecycle configuration."
 }
+variable "cloudprem_chart_version" {
+  type        = string
+  default     = null
+  description = "CloudPrem Helm chart version to deploy. Defaults to latest from helm.datadoghq.com."
+}
 variable "enable_cloud_security" {
   type        = bool
   description = "Enable Datadog Cloud Security products. Set to \"true\" to enable."

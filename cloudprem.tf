@@ -3,6 +3,17 @@ data "aws_vpc" "quicklab" {
   id    = var.vpc_id
 }
 
+data "http" "datadog_helm_index" {
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  url   = "https://helm.datadoghq.com/index.yaml"
+
+  retry {
+    attempts     = 3
+    min_delay_ms = 1000
+    max_delay_ms = 5000
+  }
+}
+
 data "aws_subnets" "private" {
   count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
@@ -26,6 +37,12 @@ locals {
     name_override     = ""
     internal_lb_name  = "${var.prefix}-${var.uid}-${local.module}-cloudprem" # limit 32 characters
   }
+  cloudprem_chart_version = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? (
+    coalesce(
+      var.cloudprem_chart_version,
+      try(yamldecode(data.http.datadog_helm_index[0].response_body).entries["cloudprem"][0].version, "0.5.1")
+    )
+  ) : null
 }
 
 resource "local_file" "cloudprem_values" {
@@ -56,7 +73,7 @@ resource "helm_release" "cloudprem" {
   name       = local.cloudprem.helm_release
   repository = "https://helm.datadoghq.com/" # https://artifacthub.io/packages/helm/datadog/"
   chart      = "cloudprem"
-  version    = "0.1.14"
+  version    = local.cloudprem_chart_version
 
   lint             = true
   upgrade_install  = true
@@ -75,11 +92,12 @@ resource "terraform_data" "cloudprem_secrets" {
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
 
   provisioner "local-exec" {
+    when    = create
     command = <<-EOT
     export KUBECONFIG=~/.kube/$CLUSTER_NAME
-    kubectl create namespace $NAMESPACE
-    kubectl create secret generic datadog-secret --namespace $NAMESPACE --from-literal api-key=$DD_API_KEY
-    kubectl create secret generic cloudprem-metastore-uri --namespace $NAMESPACE --from-literal QW_METASTORE_URI="postgres://$USERNAME:$PASSWORD@$ADDRESS:$PORT/$DATABASE"
+    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create secret generic datadog-secret --namespace $NAMESPACE --from-literal api-key=$DD_API_KEY --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create secret generic cloudprem-metastore-uri --namespace $NAMESPACE --from-literal QW_METASTORE_URI="postgres://$USERNAME:$PASSWORD@$ADDRESS:$PORT/$DATABASE" --dry-run=client -o yaml | kubectl apply -f -
     EOT
     environment = {
       NAMESPACE    = local.cloudprem.namespace
@@ -90,6 +108,20 @@ resource "terraform_data" "cloudprem_secrets" {
       ADDRESS      = module.cloudprem_db[0].db_instance_address
       PORT         = module.cloudprem_db[0].db_instance_port
       DATABASE     = module.cloudprem_db[0].db_instance_name
+    }
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+    export KUBECONFIG=~/.kube/$CLUSTER_NAME
+    kubectl delete secret datadog-secret --namespace $NAMESPACE --ignore-not-found
+    kubectl delete secret cloudprem-metastore-uri --namespace $NAMESPACE --ignore-not-found
+    kubectl delete namespace $NAMESPACE --ignore-not-found
+    EOT
+    environment = {
+      CLUSTER_NAME = self.triggers_replace[0]
+      NAMESPACE    = self.triggers_replace[1]
     }
   }
 
