@@ -8,6 +8,12 @@ module "datadog_forwarder" {
   create_dd_api_key_secret = false
   dd_api_key_secret_arn    = module.datadog_secrets["api-key-log-forwarder"].secret_arn
   dd_site                  = var.datadog_site
+  # The CloudPrem internal ALB only has an HTTP:80 listener
+  # (alb.ingress.kubernetes.io/listen-ports), so the port and no-ssl flags are required:
+  # given dd_url alone the Forwarder defaults to HTTPS on 443 and every post fails.
+  dd_url    = var.create_byoc_k8s_deployments ? try(data.aws_lb.cloudprem_ingress[0].dns_name, null) : null
+  dd_port   = var.create_byoc_k8s_deployments ? "80" : null
+  dd_no_ssl = var.create_byoc_k8s_deployments ? "true" : null
 
   # Lambda function
   function_name         = "${var.prefix}-${var.uid}-datadog-forwarder"

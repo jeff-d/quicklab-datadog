@@ -9,8 +9,24 @@ spec:
   global:
     site: ${DATADOG_SITE}
     credentials:
-      apiKey: ${DATADOG_API_KEY}
-      appKey: ${DATADOG_APP_KEY}
+      apiSecret:
+        secretName: ${DATADOG_KEYS_SECRET}
+        keyName: api-key
+      appSecret:
+        secretName: ${DATADOG_KEYS_SECRET}
+        keyName: app-key
+%{ if CLOUDPREM_INDEXER_URL != "" ~}
+    env:
+      - name: DD_LOGS_CONFIG_LOGS_DD_URL
+        value: "${CLOUDPREM_INDEXER_URL}"
+      - name: DD_LOGS_CONFIG_FORCE_USE_HTTP
+        value: "true"
+      # Must carry a unit: a bare number is parsed as nanoseconds, so "100000" silently
+      # became 100µs. CloudPrem does no backend tag enrichment, so host-level tags have to
+      # be attached by the Agent at send time.
+      - name: DD_LOGS_CONFIG_EXPECTED_TAGS_DURATION
+        value: "87600h"
+%{ endif ~}
   features:
     # Reference: https://github.com/DataDog/datadog-operator/blob/main/examples/datadogagent/datadog-agent-all.yaml
     logCollection:

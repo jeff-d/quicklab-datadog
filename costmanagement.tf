@@ -165,6 +165,49 @@ resource "aws_iam_role_policy_attachment" "datadog_cur_access" {
   policy_arn = aws_iam_policy.datadog_cur_access.arn
 }
 
+# Both the Datadog AWS integration and the CUR API validate access by assuming the
+# cross-account role, so the role's policy attachments must be observable before
+# either is created. They already exist per Terraform's dependency graph by this
+# point, but IAM's read path is eventually consistent and a cross-account
+# role-assumption may not yet observe them. Poll IAM's own read API (the same
+# eventually-consistent store) for the attachment to become visible, rather than
+# guessing at a fixed sleep duration -- data sources/APIs with no built-in retry
+# are a known gap (https://github.com/hashicorp/terraform-provider-aws/issues/40520),
+# and a local-exec provisioner gated by depends_on is the HashiCorp-recommended
+# workaround, per https://github.com/hashicorp/terraform-provider-aws/issues/26026.
+# datadog_integration_aws_account depends on this, so it must not be listed here.
+resource "terraform_data" "datadog_aws_integration_ready" {
+  depends_on = [
+    aws_iam_role_policy_attachment.datadog_cur_access,
+    aws_iam_role_policy_attachment.datadog_aws_integration,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+    set -euo pipefail
+    ATTEMPTS=0
+    MAX_ATTEMPTS=30
+    while true; do
+      ATTACHED=$(aws iam list-attached-role-policies --role-name "$ROLE_NAME" --query "length(AttachedPolicies[?PolicyArn=='$POLICY_ARN'])" --output text 2>/dev/null || echo "0")
+      if [ "$ATTACHED" != "0" ]; then
+        echo "IAM policy $POLICY_ARN is attached to role $ROLE_NAME"
+        break
+      fi
+      ATTEMPTS=$((ATTEMPTS + 1))
+      if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
+        echo "Timed out waiting for $POLICY_ARN to be attached to $ROLE_NAME" >&2
+        exit 1
+      fi
+      sleep 10
+    done
+    EOT
+    environment = {
+      ROLE_NAME  = aws_iam_role.datadog_aws_integration.name
+      POLICY_ARN = aws_iam_policy.datadog_cur_access.arn
+    }
+  }
+}
+
 # Create new aws_cur_config resource
 resource "datadog_aws_cur_config" "aws_cur_770341584863" {
   account_id    = data.aws_caller_identity.current.account_id
@@ -173,5 +216,10 @@ resource "datadog_aws_cur_config" "aws_cur_770341584863" {
   report_name   = aws_cur_report_definition.datadog_cur.report_name
   report_prefix = aws_cur_report_definition.datadog_cur.s3_prefix
 
-  depends_on = [aws_cur_report_definition.datadog_cur, aws_iam_policy.datadog_cur_access]
+  # The CUR API's BUCKET_ACCESS check reads Datadog's stored health for the AWS
+  # integration, so the integration must already exist and have validated cleanly.
+  depends_on = [
+    aws_cur_report_definition.datadog_cur,
+    datadog_integration_aws_account.datadog_integration,
+  ]
 }

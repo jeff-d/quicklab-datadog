@@ -80,3 +80,15 @@ variable "enable_cloud_security" {
   description = "Enable Datadog Cloud Security products. Set to \"true\" to enable."
   default     = false
 }
+variable "kubeconfig_ready" {
+  type        = any
+  default     = null
+  description = <<-EOT
+    Opaque reference-carrier used only to order this module's Kubernetes-touching resources
+    (helm_release.datadog_operator, helm_release.cloudprem, terraform_data.cloudprem_secrets)
+    after the QuickLab Cluster component's kubeconfig file is written. The value itself is
+    never read by this module; only the resource reference the caller assigns to it matters
+    for Terraform's dependency graph. Deliberately not depended on at the whole-module level,
+    so AWS-only resources in this module aren't serialized behind cluster creation.
+  EOT
+}

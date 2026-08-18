@@ -33,6 +33,34 @@ resource "terraform_data" "datadog_tags" {
   input = var.datadog_tags
 }
 
+resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
+  count            = var.create_server && !var.server_otelcol && var.create_byoc_k8s_deployments ? 1 : 0
+  name             = "AWS-RunShellScript"
+  association_name = "datadog-agent-cloudprem-logs_${var.prefix}-${var.uid}"
+
+  targets {
+    key    = "tag:quicklab-id"
+    values = [var.uid]
+  }
+
+  # AWS-RunShellScript takes no environment block, so the ALB DNS name is interpolated by
+  # Terraform rather than passed as a shell variable. touch precedes sed because sed -i
+  # fails on a missing file, and the agent installer may not have created it yet. The sed
+  # makes the write idempotent: tee -a alone accumulates duplicate lines every time the
+  # association re-runs. http:// and :80 are both required — the ALB has no 443 listener,
+  # and without a scheme the Agent defaults to TLS and never ingests.
+  parameters = {
+    commands = jsonencode([
+      "sudo touch /etc/datadog-agent/environment",
+      "sudo sed -i '/^DD_LOGS_CONFIG_/d' /etc/datadog-agent/environment",
+      "printf 'DD_LOGS_CONFIG_LOGS_DD_URL=http://${data.aws_lb.cloudprem_ingress[0].dns_name}:80\\nDD_LOGS_CONFIG_FORCE_USE_HTTP=true\\nDD_LOGS_CONFIG_EXPECTED_TAGS_DURATION=87600h\\n' | sudo tee -a /etc/datadog-agent/environment",
+      "sudo systemctl restart datadog-agent"
+    ])
+  }
+
+  depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint]
+}
+
 # enable Workflows to work with the Datadog API
 #! no Datadog Action Connection resource exists in datadog terraform provider 3.83.0
 resource "datadog_action_connection" "http" {
@@ -141,7 +169,7 @@ resource "datadog_workflow_automation" "agent_config" {
                         }
                         logs_enabled = true
                         logs_config = {
-                          # logs_dd_url                  = try("https://${data.aws_lb.cloudprem_ingress[0].dns_name}", null) #! (Feb, 2026) setting logs_dd_url is not supported in fleet automation: https://github.com/DataDog/dd-source/blob/main/domains/remote-config/shared/libs/config-validator/schemas/INSTALLER_CONFIG/datadog.json
+                          # logs_dd_url                  = try("https://${data.aws_lb.cloudprem_ingress[0].dns_name}", null) #! (August, 2026) setting logs_dd_url is not supported in fleet automation: https://github.com/DataDog/dd-source/blob/84e3366b38b818ff147c662af5e59e09bb35f550/domains/remote-config/shared/libs/config-validator/schemas/INSTALLER_CONFIG/datadog.json#L616
                           file_wildcard_selection_mode = "by_modification_time"
                         }
                       }

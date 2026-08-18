@@ -16,6 +16,9 @@
 # Helm Values Files
 *values.yaml
 
+# Terraform-generated Kubernetes manifests
+templates/DatadogAgent-deployment.yaml
+
 # Kubeconfig files
 *kubeconfig*
 

@@ -67,8 +67,12 @@ resource "local_file" "cloudprem_values" {
 }
 
 resource "helm_release" "cloudprem" {
-  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
-  depends_on = [terraform_data.cloudprem_secrets, module.cloudprem_db, local_file.cloudprem_values]
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  # terraform_data.cloudprem_deregister is a create-time no-op; the edge exists so that on
+  # destroy Terraform uninstalls this release (the dependent) before running that resource's
+  # deregistration provisioner. See the comment on that resource.
+  depends_on = [var.kubeconfig_ready, terraform_data.cloudprem_secrets, module.cloudprem_db,
+  local_file.cloudprem_values, terraform_data.cloudprem_deregister]
 
   name       = local.cloudprem.helm_release
   repository = "https://helm.datadoghq.com/" # https://artifacthub.io/packages/helm/datadog/"
@@ -87,8 +91,10 @@ resource "helm_release" "cloudprem" {
 }
 
 resource "terraform_data" "cloudprem_secrets" {
-  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
-  # depends_on       = [module.quicklab_cluster, helm_release.karpenter] 
+  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  depends_on = [var.kubeconfig_ready]
+  # (module.quicklab_cluster and helm_release.karpenter aren't in scope in this module;
+  # var.kubeconfig_ready orders this after the Cluster component's kubeconfig file instead.)
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
 
   provisioner "local-exec" {
@@ -125,6 +131,84 @@ resource "terraform_data" "cloudprem_secrets" {
     }
   }
 
+}
+
+# CloudPrem registers itself with Datadog's control plane when the searcher pods dial out
+# over the reverse WebSocket (CP_ENABLE_REVERSE_CONNECTION). Neither `helm uninstall` nor
+# `kubectl delete namespace` removes that registration -- the chart has only create-time jobs
+# (job-create-indices, job-create-sources) and no pre-delete hook -- so destroyed labs
+# accumulate "Inactive" rows on the BYOC Logs Clusters page indefinitely. This resource
+# exists only to carry a destroy-time provisioner that deletes the registration.
+#
+# The two depends_on edges look backwards because Terraform destroys dependents first:
+#   - helm_release.cloudprem depends on this resource, so the release is uninstalled first
+#   - this resource depends on module.datadog_secrets, so it runs before those are deleted
+#     (recovery_window_in_days = 0) and, transitively, before datadog_api_key.this is
+#     revoked -- the secrets module consumes those keys via secret_string_wo
+# Net destroy order: helm uninstall -> deregister -> secrets -> Datadog keys.
+#
+# The endpoint is /api/unstable/, so it carries no compatibility guarantee: every failure
+# path warns and exits 0 rather than blocking a destroy. Requires jq, already a de facto
+# dependency of this repo.
+resource "terraform_data" "cloudprem_deregister" {
+  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  depends_on = [module.datadog_secrets]
+
+  # Destroy-time provisioners may only reference self, so every value the script needs is
+  # carried here -- deliberately excluding the keys themselves, both to keep credentials out
+  # of state and because a key rotation would otherwise replace this resource and deregister
+  # a live cluster. The script reads them from Secrets Manager at destroy time instead.
+  # These names reproduce module.datadog_secrets's own name expression.
+  triggers_replace = {
+    site           = var.datadog_site
+    cluster_id     = local.cloudprem.cluster_id
+    region         = data.aws_region.current.region
+    api_key_secret = "${var.prefix}-${var.uid}-${local.module}-api-key-cloudprem"
+    app_key_secret = "${var.prefix}-${var.uid}-${local.module}-app-key-kubernetes-operator"
+  }
+
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = <<-EOT
+    set +e
+    API_KEY=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$API_KEY_SECRET" --query SecretString --output text 2>/dev/null)
+    APP_KEY=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_KEY_SECRET" --query SecretString --output text 2>/dev/null)
+    if [ -z "$API_KEY" ] || [ -z "$APP_KEY" ]; then
+      echo "WARNING: Datadog keys unavailable; leaving BYOC cluster $CLUSTER_ID registered" >&2
+      exit 0
+    fi
+    BASE="https://api.$DD_SITE/api/unstable/logs/cloudprem/clusters"
+    # Match on prefix, not equality: the control plane appends a suffix (e.g. -7ef62641) when
+    # a cluster_id collides, so a destroy also sweeps up rows leaked by earlier applies of
+    # this same lab. The prefix is this lab's own cluster_id, which is what makes the delete
+    # safe -- connection_status is reported but never used to skip, since right after the
+    # uninstall the control plane may not have timed out the connection yet.
+    MATCHES=$(curl -sS -m 30 -H "DD-API-KEY: $API_KEY" -H "DD-APPLICATION-KEY: $APP_KEY" "$BASE" \
+      | jq -r --arg p "$CLUSTER_ID" '.clusters[]? | select(.name | startswith($p)) | "\(.id) \(.connection_status)"')
+    if [ -z "$MATCHES" ]; then
+      echo "No BYOC cluster registration matching $CLUSTER_ID; nothing to deregister"
+      exit 0
+    fi
+    echo "$MATCHES" | while read -r ID STATUS; do
+      [ -z "$ID" ] && continue
+      if [ "$STATUS" != "reverse_inactive" ]; then
+        echo "WARNING: BYOC cluster $ID still reports $STATUS; deleting anyway" >&2
+      fi
+      CODE=$(curl -sS -o /dev/null -w '%%{http_code}' -m 30 -X DELETE \
+        -H "DD-API-KEY: $API_KEY" -H "DD-APPLICATION-KEY: $APP_KEY" "$BASE/$ID")
+      echo "Deregistered BYOC cluster $ID (was $STATUS, HTTP $CODE)"
+    done
+    exit 0
+    EOT
+    environment = {
+      DD_SITE        = self.triggers_replace.site
+      CLUSTER_ID     = self.triggers_replace.cluster_id
+      REGION         = self.triggers_replace.region
+      API_KEY_SECRET = self.triggers_replace.api_key_secret
+      APP_KEY_SECRET = self.triggers_replace.app_key_secret
+    }
+  }
 }
 
 module "cloudprem_db" {
@@ -303,6 +387,48 @@ resource "aws_eks_pod_identity_association" "cloudprem" {
   tags = merge(local.cloud_resource_tags, {})
 }
 
+resource "terraform_data" "cloudprem_alb_exists" {
+  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  depends_on = [helm_release.cloudprem]
+
+  # aws-load-balancer-controller provisions the ALB asynchronously after helm_release.cloudprem
+  # completes, and data.aws_lb has no built-in retry on "not found" (see
+  # https://github.com/hashicorp/terraform-provider-aws/issues/40520). A local-exec provisioner
+  # gated by depends_on is the HashiCorp-recommended workaround for this gap, per
+  # https://github.com/hashicorp/terraform-provider-aws/issues/26026. Poll only for the ALB's
+  # existence/discoverability by tag: dns_name is assigned at creation time, before the ALB
+  # reaches "active" state, and nothing downstream needs more than the DNS name.
+  provisioner "local-exec" {
+    command = <<-EOT
+    set -euo pipefail
+    ATTEMPTS=0
+    MAX_ATTEMPTS=30
+    while true; do
+      ARN=$(aws resourcegroupstaggingapi get-resources \
+        --region "$REGION" \
+        --resource-type-filters elasticloadbalancing:loadbalancer \
+        --tag-filters "Key=elbv2.k8s.aws/cluster,Values=$CLUSTER_NAME" "Key=ingress.k8s.aws/stack,Values=$STACK_TAG" "Key=ingress.k8s.aws/resource,Values=LoadBalancer" \
+        --query 'ResourceTagMappingList[0].ResourceARN' --output text 2>/dev/null || echo "None")
+      if [ "$ARN" != "None" ] && [ -n "$ARN" ]; then
+        echo "CloudPrem ALB found: $ARN"
+        break
+      fi
+      ATTEMPTS=$((ATTEMPTS + 1))
+      if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
+        echo "Timed out waiting for CloudPrem ALB to become discoverable via tags" >&2
+        exit 1
+      fi
+      sleep 10
+    done
+    EOT
+    environment = {
+      REGION       = data.aws_region.current.region
+      CLUSTER_NAME = var.cluster_name
+      STACK_TAG    = "${local.cloudprem.namespace}/cloudprem-internal"
+    }
+  }
+}
+
 data "aws_lb" "cloudprem_ingress" {
   count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
 
@@ -312,7 +438,19 @@ data "aws_lb" "cloudprem_ingress" {
     "ingress.k8s.aws/resource" = "LoadBalancer"
   }
 
-  depends_on = [helm_release.cloudprem]
+  depends_on = [terraform_data.cloudprem_alb_exists]
+}
+
+resource "aws_secretsmanager_secret" "cloudprem_ingress_endpoint" {
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  name  = "${var.prefix}-${var.uid}-cloudprem-ingress-endpoint"
+  tags  = var.cloud_resource_tags
+}
+
+resource "aws_secretsmanager_secret_version" "cloudprem_ingress_endpoint" {
+  count         = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.cloudprem_ingress_endpoint[0].id
+  secret_string = data.aws_lb.cloudprem_ingress[0].dns_name
 }
 
 /*

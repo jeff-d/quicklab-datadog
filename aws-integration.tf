@@ -16,6 +16,18 @@ data "datadog_integration_aws_available_logs_services" "all" {}
 
 data "datadog_integration_aws_iam_permissions" "all" {}
 
+# Minting the external ID here, rather than reading it back off
+# datadog_integration_aws_account, is what lets the cross-account role be created
+# *before* the Datadog integration. Datadog validates the integration by assuming
+# that role at creation time, so a role that doesn't exist yet gets the account
+# recorded as "disabled or misconfigured", which later fails the CUR config's
+# BUCKET_ACCESS check.
+# An unused external ID expires after 48h, so if an apply creates this but fails
+# before datadog_integration_aws_account is created and isn't retried for two
+# days, mint a fresh one:
+#   terraform apply -replace='module.datadog[0].datadog_integration_aws_external_id.this'
+resource "datadog_integration_aws_external_id" "this" {}
+
 data "aws_iam_policy_document" "datadog_aws_integration_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -26,9 +38,7 @@ data "aws_iam_policy_document" "datadog_aws_integration_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "sts:ExternalId"
-      values = [
-        "${datadog_integration_aws_account.datadog_integration.auth_config.aws_auth_config_role.external_id}"
-      ]
+      values   = [datadog_integration_aws_external_id.this.id]
     }
   }
 }
@@ -89,8 +99,6 @@ resource "aws_iam_role" "datadog_aws_integration" {
   assume_role_policy = data.aws_iam_policy_document.datadog_aws_integration_assume_role.json
 
   tags = local.cloud_resource_tags
-
-  lifecycle { ignore_changes = [assume_role_policy] }
 }
 
 resource "aws_iam_role_policy_attachment" "datadog_aws_integration" {
@@ -175,6 +183,11 @@ locals {
 }
 
 resource "datadog_integration_aws_account" "datadog_integration" {
+  # Datadog assumes the cross-account role to validate this integration as soon as
+  # it is created, so gate creation on the role's policy attachments being visible
+  # in IAM's eventually-consistent read path.
+  depends_on = [terraform_data.datadog_aws_integration_ready]
+
   account_tags   = local.account_tags # list(string) Tags to apply to all metrics in the account.
   aws_account_id = data.aws_caller_identity.current.account_id
   aws_partition  = data.aws_partition.current.partition
@@ -185,7 +198,8 @@ resource "datadog_integration_aws_account" "datadog_integration" {
 
   auth_config {
     aws_auth_config_role {
-      role_name = var.integration_role_name != "DatadogIntegrationRole" ? var.integration_role_name : "${var.prefix}-${var.uid}-DatadogIntegrationRole" # using aws_iam_role.datadog_aws_integration.name gives a tf cycle error
+      role_name   = aws_iam_role.datadog_aws_integration.name
+      external_id = datadog_integration_aws_external_id.this.id
     }
   }
 
