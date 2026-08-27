@@ -60,6 +60,20 @@ variable "cluster_name" {
   default     = null
   description = "Name of the EKS cluster to integrate with Datadog. Set to null (or omit) when no QuickLab cluster is provisioned."
 }
+variable "cluster_enabled" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Whether the caller's Cluster component is enabled. Gates this module's cluster-facing
+    resources.
+
+    Deliberately separate from var.cluster_name rather than derived from it. The name is
+    built from a managed resource attribute, so on a greenfield build it is unknown until
+    apply, and count/for_each cannot accept an unknown. This flag comes straight from the
+    caller's own create_cluster input, so it is always known at plan time. Do not
+    "simplify" the two into one input.
+  EOT
+}
 variable "create_byoc_k8s_deployments" {
   type        = bool
   description = "A flag for 'bring your own cloud' kubernetes deployment creation (Datadog Observability Pipelines and Datadog CloudPrem). Set to \"true\" to enable."
@@ -90,5 +104,44 @@ variable "kubeconfig_ready" {
     never read by this module; only the resource reference the caller assigns to it matters
     for Terraform's dependency graph. Deliberately not depended on at the whole-module level,
     so AWS-only resources in this module aren't serialized behind cluster creation.
+  EOT
+}
+variable "lbc_ready" {
+  type        = any
+  default     = null
+  description = <<-EOT
+    Opaque reference-carrier used only to order terraform_data.cloudprem_secrets after the
+    QuickLab Cluster component's aws-load-balancer-controller release. The value itself is never
+    read; only the reference matters for the dependency graph.
+
+    This edge exists for destroy, not create. The CloudPrem chart creates an Ingress that the
+    controller reconciles into an ALB and holds the ingress.k8s.aws/resources finalizer on.
+    Terraform destroys dependents first, so making the namespace's owner depend on the controller
+    keeps the controller running until the namespace is gone. Without it the two are siblings
+    (both merely downstream of the kubeconfig), the controller can be uninstalled first, and the
+    Ingress then blocks namespace deletion indefinitely while its ALB leaks. See also the
+    Controller lifetimes ADR in ../qlpoc/AGENTS.md.
+  EOT
+}
+variable "karpenter_ready" {
+  type        = any
+  default     = null
+  description = <<-EOT
+    Opaque reference-carrier used only to order terraform_data.cloudprem_secrets after the
+    QuickLab Cluster component's Karpenter NodePool/EC2NodeClass. The value itself is never
+    read; only the reference matters for the dependency graph. Null when the cluster is
+    disabled or when cluster_autoscaler is not "karpenter".
+
+    Like lbc_ready this edge is about destroy, but it protects capacity rather than credentials.
+    CloudPrem's pods run on Karpenter-provisioned nodes, and deleting the NodePool starts
+    draining them. Without this edge the NodePool delete and the namespace delete are siblings,
+    so the nodes can be torn out from under pods that are still running: the NodeClaim cannot
+    drain, the sweep in ../qlpoc/cluster.tf force-terminates the instance, and the orphaned pods
+    stay Terminating until Karpenter reconciles the dead node -- which routinely overruns the
+    namespace delete's timeout. Ordering the NodePool after the namespace means the nodes are
+    already empty when the NodePool goes, so the drain is immediate.
+
+    On create this correctly makes CloudPrem wait for the NodePool to exist, so its pods have
+    somewhere to schedule instead of sitting Pending against the release's atomic timeout.
   EOT
 }

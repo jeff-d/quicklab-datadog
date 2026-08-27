@@ -91,10 +91,14 @@ resource "helm_release" "cloudprem" {
 }
 
 resource "terraform_data" "cloudprem_secrets" {
-  count      = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
-  depends_on = [var.kubeconfig_ready]
-  # (module.quicklab_cluster and helm_release.karpenter aren't in scope in this module;
-  # var.kubeconfig_ready orders this after the Cluster component's kubeconfig file instead.)
+  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  # Cluster-component resources are out of scope here, so all three edges arrive as opaque
+  # variables. They are anchored on this resource, whose destroy provisioner deletes the
+  # namespace, rather than on helm_release.cloudprem: everything in the namespace is torn down
+  # before the namespace itself, so one edge here orders the whole teardown. Moving them to the
+  # release would leave the namespace delete racing the controller.
+  # See ../qlpoc/readme.md "Terraform Implementation Details / Datadog".
+  depends_on       = [var.kubeconfig_ready, var.lbc_ready, var.karpenter_ready]
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
 
   provisioner "local-exec" {
@@ -117,13 +121,26 @@ resource "terraform_data" "cloudprem_secrets" {
     }
   }
 
+  # This delete is the barrier that keeps aws-load-balancer-controller alive until the Ingress
+  # finalizer clears. Bounded so a finalizer with no controller left to clear it fails loudly
+  # instead of hanging, and deliberately carrying no `|| true` -- unlike the deletes in
+  # ../qlpoc/cluster.tf, nothing sweeps up behind this one. 600s because the finalizer chain
+  # (ALB, ENIs, target groups, security group rules) runs 4-7 minutes.
+  # See ../qlpoc/readme.md "Terraform Implementation Details / Datadog".
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
     export KUBECONFIG=~/.kube/$CLUSTER_NAME
     kubectl delete secret datadog-secret --namespace $NAMESPACE --ignore-not-found
     kubectl delete secret cloudprem-metastore-uri --namespace $NAMESPACE --ignore-not-found
-    kubectl delete namespace $NAMESPACE --ignore-not-found
+    kubectl delete namespace $NAMESPACE --ignore-not-found --wait=true --timeout=600s && exit 0
+    # kubectl can give up moments before the namespace controller finishes, so re-check rather
+    # than failing a teardown that actually completed.
+    kubectl get namespace $NAMESPACE --ignore-not-found -o name 2>/dev/null | grep -q . || exit 0
+    echo "ERROR: namespace $NAMESPACE did not finalize within 600s; still present:" 1>&2
+    kubectl get all,ingress --namespace $NAMESPACE 1>&2
+    kubectl get namespace $NAMESPACE -o jsonpath='{.status.conditions}' 1>&2
+    exit 1
     EOT
     environment = {
       CLUSTER_NAME = self.triggers_replace[0]
@@ -218,12 +235,13 @@ module "cloudprem_db" {
 
   identifier = "${var.prefix}-${var.uid}-${local.module}-cloudprem"
 
-  engine            = "postgres"
-  engine_version    = "17.6"
-  family            = "postgres17"
-  instance_class    = "db.t3.micro"
-  allocated_storage = 20
-  storage_type      = "gp3"
+  engine                     = "postgres"
+  engine_version             = "17.9"
+  auto_minor_version_upgrade = false
+  family                     = "postgres17"
+  instance_class             = "db.t3.micro"
+  allocated_storage          = 20
+  storage_type               = "gp3"
 
   db_name                     = "cloudprem"
   username                    = "cloudprem"
@@ -244,8 +262,9 @@ module "cloudprem_db" {
 }
 
 resource "random_password" "cloudprem_db" {
-  count  = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
-  length = 8
+  count            = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  length           = 8
+  override_special = "!#$%&*()-_=+[]{}<>:?" # RDS rejects '/', '@', '"' and space in MasterUserPassword. 
 }
 
 module "cloudprem_security_group" {
@@ -444,7 +463,12 @@ data "aws_lb" "cloudprem_ingress" {
 resource "aws_secretsmanager_secret" "cloudprem_ingress_endpoint" {
   count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   name  = "${var.prefix}-${var.uid}-cloudprem-ingress-endpoint"
-  tags  = var.cloud_resource_tags
+
+  # Matches module.datadog_secrets. The 30-day default reserves the name after a destroy, so a
+  # rebuild at the same uid fails with "already scheduled for deletion".
+  recovery_window_in_days = 0
+
+  tags = var.cloud_resource_tags
 }
 
 resource "aws_secretsmanager_secret_version" "cloudprem_ingress_endpoint" {

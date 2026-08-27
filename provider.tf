@@ -18,5 +18,12 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.0"
     }
+    # Declared, not configured: a child module states which providers it needs and inherits the
+    # configuration from the root. helm_release.cloudprem and helm_release.datadog_operator were
+    # already relying on implicit inference, which left this constraint unexpressed.
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.1.0"
+    }
   }
 }
