@@ -20,8 +20,8 @@ data "datadog_integration_aws_iam_permissions" "all" {}
 # datadog_integration_aws_account, is what lets the cross-account role be created
 # *before* the Datadog integration. Datadog validates the integration by assuming
 # that role at creation time, so a role that doesn't exist yet gets the account
-# recorded as "disabled or misconfigured", which later fails the CUR config's
-# BUCKET_ACCESS check.
+# recorded as "disabled or misconfigured", which later fails the Cloud Cost
+# Management config's role-assumption and S3 access checks.
 # An unused external ID expires after 48h, so if an apply creates this but fails
 # before datadog_integration_aws_account is created and isn't retried for two
 # days, mint a fresh one:
