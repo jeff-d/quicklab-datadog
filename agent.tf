@@ -34,7 +34,7 @@ resource "terraform_data" "datadog_tags" {
 }
 
 resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
-  count            = var.create_server && !var.server_otelcol && var.create_byoc_k8s_deployments ? 1 : 0
+  count            = local.quicklab_cluster_enabled && var.create_server && !var.server_otelcol && var.create_byoc_k8s_deployments ? 1 : 0
   name             = "AWS-RunShellScript"
   association_name = "datadog-agent-cloudprem-logs_${var.prefix}-${var.uid}"
 

@@ -147,38 +147,41 @@ locals {
   taggable_namespaces = ["AWS/ApplicationELB", "AWS/ELB", "AWS/EC2", "AWS/Lambda", "AWS/AmazonMQ", "AWS/Kafka", "AWS/NetworkELB", "AWS/RDS", "AWS/SQS", "AWS/States"]
   include_metric_namespaces = [
     # auditing
-    "AWS/CloudTrail", "AWS/IAM", "AWS/KMS",
+    "AWS/KMS",
 
     # common
-    "AWS/CertificateManager", "AWS/ACMPrivateCA",
+    "AWS/CertificateManager", "AWS/SecretsManager",
 
     # AI
-    "AWS/Bedrock/Guardrails", "AWS/ML", "AWS/SageMaker", "AWS/SageMaker/TrainingJobs",
+    "AWS/Bedrock", "AWS/Bedrock-AgentCore", "AWS/Bedrock/Agents", "AWS/Bedrock/Batch",
+    "AWS/Bedrock/DataAutomation", "AWS/Bedrock/KnowledgeBases", "AWS/BedrockMantle",
+    "AWS/ML", "AWS/SageMaker", "/aws/sagemaker/TrainingJobs",
 
     # serverless
     "AWS/ApiGateway", "AWS/Lambda",
 
     # data stores
-    "AWS/RDS", "AWS/S3",
+    "AWS/DocDB", "AWS/DynamoDB", "AWS/ElastiCache", "AWS/ES", "AWS/RDS", "AWS/Redshift",
+    "AWS/S3",
 
-    # data streaming
+    # data
     "AWS/ElasticMapReduce", "AWS/Firehose", "AWS/Kafka", "AWS/Kinesis", "AWS/KinesisAnalytics",
-    "AWS/KinesisVideo",
+    "AWS/States",
 
     # infrastructure
-    "AWS/ApplicationELB", "AWS/ELB", "AWS/NetworkELB", "AWS/Route53", "AWS/StorageGateway",
-    "AWS/TransitGateway", "AWS/VPC", "AWS/WAF", "AWS/WAFV2",
+    "AWS/ApplicationELB", "AWS/CloudFront", "AWS/ELB", "AWS/NATGateway", "AWS/NetworkELB",
+    "AWS/PrivateLinkEndpoints", "AWS/PrivateLinkServices", "AWS/Route53", "AWS/StorageGateway",
+    "AWS/TransitGateway", "AWS/VPN", "WAF", "AWS/WAFV2",
 
     # compute
-    "AWS/EBS", "AWS/EC2", "AWS/EC2Spot", "AWS/ECR", "AWS/ECS",
-    "ECS/ContainerInsights", "EKS/ContainerInsights", "AWS/IoT", "AWS/IoTAnalytics",
+    "AWS/AutoScaling", "AWS/EBS", "AWS/EC2", "AWS/EC2Spot", "AWS/ECR", "AWS/ECS",
+    "AWS/EFS", "AWS/EKS", "AWS/IoT",
 
     # events
     "AWS/Events", "AWS/SES", "AWS/SNS", "AWS/SQS",
 
     # desktop virtualization
-    "AWS/WorkSpaces", "AWS/WorkSpacesWeb", "AWS/WorkSpacesThinClient", "AWS/WorkSpaces/Usage", "AWS/WorkSpaces/Pool",
-    "AWS/WorkSpacesProtocol", "AWS/WorkSpaces/Status", "AWS/WorkSpaces/Session", "AWS/WorkSpacesWeb/Session", "AWS/WorkSpacesWeb/Portal",
+    "AWS/WorkSpaces",
   ]
 }
 

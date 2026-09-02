@@ -51,8 +51,9 @@ templates/DatadogAgent-deployment.yaml
 # .terraformignore files
 *.terraformignore
 
-# Terraform State Lock file
-.terraform.lock.hcl
+# Terraform dependency lock file: tracked, so CI resolves the provider versions the
+# module was tested against. Must be re-included after the *.terraform* rule above.
+!.terraform.lock.hcl
 
 # log files
 *.log

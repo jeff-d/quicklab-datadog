@@ -16,9 +16,9 @@ module "datadog_forwarder" {
   dd_no_ssl = var.create_byoc_k8s_deployments ? "true" : null
 
   # Lambda function
-  function_name         = "${var.prefix}-${var.uid}-datadog-forwarder"
-  layer_version         = "93" # default: "latest" #! 94 is broken due to python 3.14 upgrade: https://github.com/DataDog/terraform-aws-log-lambda-forwarder-datadog/pull/22
-  reserved_concurrency  = 10
+  function_name = "${var.prefix}-${var.uid}-datadog-forwarder"
+  layer_version = "93" # default: "latest" #! 94 is broken due to python 3.14 upgrade: https://github.com/DataDog/terraform-aws-log-lambda-forwarder-datadog/pull/22
+  # reserved_concurrency  = 10
   log_retention_in_days = 1
   dd_max_workers        = null   # (string)
   dd_enhanced_metrics   = false  # adds additional custom metrics used to inspect the Forwarder function's performance

@@ -417,8 +417,11 @@ resource "terraform_data" "cloudprem_alb_exists" {
   # https://github.com/hashicorp/terraform-provider-aws/issues/26026. Poll only for the ALB's
   # existence/discoverability by tag: dns_name is assigned at creation time, before the ALB
   # reaches "active" state, and nothing downstream needs more than the DNS name.
+  # local-exec defaults to /bin/sh, which is dash on Debian-family runners (including GitHub's
+  # ubuntu-latest) and has no `-o pipefail`. Pin bash so the script's error handling holds there.
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
     set -euo pipefail
     ATTEMPTS=0
     MAX_ATTEMPTS=30

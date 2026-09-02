@@ -1,0 +1,81 @@
+# This file is part of QuickLab, which creates simple, observable labs.
+# https://github.com/jeff-d/quicklab
+#
+# SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The apply/destroy suite, tests/integration-*.tftest.hcl, against a real AWS account and
+# a real Datadog org.
+#
+# Separate from test.yaml for three reasons: it needs secrets, so it cannot run on a
+# fork's pull request; it needs id-token: write, which is worth confining to the one
+# workflow that uses it; and it costs real minutes and real resources, so it runs on
+# merge or on request rather than on every commit.
+
+name: integration
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Not keyed on the ref, and explicitly not cancelling. This suite creates a live AWS
+# account integration and a Cost and Usage Report export in a shared sandbox account, so
+# two runs must never overlap, and a cancelled run would leak whatever it had created
+# before its destroy step. Both differ from test.yaml, where runs are independent and
+# safe to cancel.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # Attribute this run's API calls in the sandbox account's CloudTrail.
+      # https://registry.terraform.io/providers/hashicorp/aws/latest/docs#custom-user-agent-information
+      TF_APPEND_USER_AGENT: "GitHubActions/${{ github.repository }}/${{ github.workflow }}/${{ github.job }}"
+
+      # The test file declares empty provider blocks and lets both providers read their
+      # configuration from here, so no credential is ever written into a .tftest.hcl.
+      # DD_HOST is the API base URL and has to agree with the datadog_site the suite
+      # pins, which is datadoghq.com.
+      DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+      DD_APP_KEY: ${{ secrets.DATADOG_APP_KEY }}
+      DD_HOST: https://api.datadoghq.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      # Globbed for the same reason test.yaml globs: a second integration file should not
+      # need a workflow edit. The two globs are complements, so every file in tests/ is
+      # claimed by exactly one of the two suites.
+      #
+      # terraform test destroys what it created, including after a failed run, so there
+      # is no separate cleanup step the way there is in a plan/apply/destroy workflow.
+      - name: Terraform Test
+        run: terraform test -no-color -verbose $(ls tests/integration-*.tftest.hcl | sed 's|^|-filter=|')

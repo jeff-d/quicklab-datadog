@@ -14,8 +14,25 @@ variable "uid" {
   description = "QuickLab ID"
   default     = null
 }
-variable "vpc_id" { type = string }
-variable "datadog_site" { type = string }
+variable "vpc_id" {
+  type        = string
+  default     = null
+  description = "ID of the VPC hosting CloudPrem. Only read when cluster_enabled and create_byoc_k8s_deployments are both true; omit otherwise."
+}
+variable "datadog_site" {
+  type        = string
+  description = "Datadog site parameter in domain form (e.g. datadoghq.com), not the region code (e.g. US1). Reference: https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site"
+
+  validation {
+    condition = contains([
+      "datadoghq.com", "us3.datadoghq.com", "us5.datadoghq.com",
+      "datadoghq.eu", "uk1.datadoghq.com",
+      "ddog-gov.com", "us2.ddog-gov.com",
+      "ap1.datadoghq.com", "ap2.datadoghq.com",
+    ], var.datadog_site)
+    error_message = "Must be a Datadog site parameter in domain form (e.g. datadoghq.com), not a region code (e.g. US1). Reference: https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site"
+  }
+}
 variable "cloud_resource_tags" {
   description = "A map of tags to add to all clous resources"
   type        = map(string)
@@ -46,7 +63,7 @@ variable "server_os" {
   description = "A flag to set the operating system the Quicklab server(s)"
   default     = []
   validation {
-    condition     = can(contains(["linux", "windows"], var.server_os))
+    condition     = alltrue([for os in var.server_os : contains(["linux", "windows"], os)])
     error_message = "These list items must be \"linux\" and/or \"windows\" (case-sensitive)."
   }
 }
@@ -83,6 +100,11 @@ variable "cloudprem_retention" {
   type        = number
   default     = 7
   description = "Number of days to retain logs in a Datadog CloudPrem index. Applies both to the CloudPrem Cluster's retention settings and the AWS S3 Bucket's lifecycle configuration."
+
+  validation {
+    condition     = var.cloudprem_retention > 0
+    error_message = "Must be a positive number of days: an S3 lifecycle expiration of 0 deletes objects immediately."
+  }
 }
 variable "cloudprem_chart_version" {
   type        = string
