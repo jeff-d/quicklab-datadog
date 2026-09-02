@@ -6,8 +6,8 @@ SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.norep
 SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
-| Monitoring | [ ![ Datadog ](https://github.com/jeff-d/qlpoc/actions/workflows/build-datadog.yaml/badge.svg?event=push) ](https://github.com/jeff-d/qlpoc/blob/main/.github/workflows/build-datadog.yaml) |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tests | [ ![ test ](https://github.com/jeff-d/quicklab-datadog/actions/workflows/test.yaml/badge.svg?event=push) ](https://github.com/jeff-d/quicklab-datadog/blob/main/.github/workflows/test.yaml) [ ![ integration ](https://github.com/jeff-d/quicklab-datadog/actions/workflows/integration.yaml/badge.svg?branch=main) ](https://github.com/jeff-d/quicklab-datadog/blob/main/.github/workflows/integration.yaml) |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 
 # Terraform Implementation Details
 
@@ -95,3 +95,56 @@ _Inline._
 ## main.tf
 
 _Inline._
+
+## tests
+
+Everything lives in `tests/`, the default test directory, which is what HashiCorp's CLI docs recommend and what published modules do. The two kinds of test are told apart by filename rather than by directory, because `terraform test` does not recurse: with suites in `tests/unit/` and `tests/integration/`, a bare `terraform test` finds no files at all and reports `Success! 0 passed`, and both suites then need `-test-directory` passed to `init` as well as `test` to avoid [hashicorp/terraform#37970](https://github.com/hashicorp/terraform/issues/37970).
+
+So the `integration-` filename prefix is the whole mechanism. Both workflows build their `-filter` lists by globbing this directory, and the two globs are complements:
+
+| Suite | Files | Trigger |
+| ----- | ----- | ------- |
+| unit and contract | `tests/*.tftest.hcl` minus `integration-*` | every commit and fork pull request, [test.yaml](.github/workflows/test.yaml) |
+| integration | `tests/integration-*.tftest.hcl` | merge to `main` or dispatch, [integration.yaml](.github/workflows/integration.yaml) |
+
+Globbing rather than enumerating means a new test file needs no workflow edit, and the unit job matches *negatively* on purpose: a file that does not opt out runs there, so the way to be skipped is to deliberately name yourself `integration-`, not to forget a prefix. A positive `unit-` prefix would have made a forgotten prefix silently skip the file, which is the worse failure.
+
+The one cost of a single directory is that a bare `terraform test` runs the integration files too, against whatever credentials happen to be in your shell. There is no way to guard that from inside a test file — test files cannot declare module variables, so there is no confirmation input to require. Run the unit suite explicitly if that matters:
+
+```bash
+terraform test $(ls tests/*.tftest.hcl | grep -v '/integration-' | sed 's|^|-filter=|')
+```
+
+The unit files are split by concern — `basic`, `gates`, `logs`, `iam`, `contract` — rather than collapsed into the single `unit.tftest.hcl` the docs' examples show, because a failing run block skips the remaining runs *in its own file* while other files still run. Five files mean a chunking bug and a gating bug surface in the same CI run instead of across three pushes. Each file also carries its own `mock_provider` header and file-level `variables`, so `logs.tftest.hcl` can override the namespaces data source without that override reaching `iam.tftest.hcl`.
+
+Having a contract suite at all matters because this module became independently useful. While it was only ever called from `qlpoc`, the caller's own variable validations screened every input; a standalone consumer gets no such screening, so `tests/contract.tftest.hcl` is now the only thing between a bad value and a failure deep inside a submodule.
+
+### The Datadog data sources have to be mocked with real values
+
+Three data sources are filters rather than decorations. `local.include_metric_namespaces` is intersected against `datadog_integration_aws_available_namespaces`, `var.autosubscribe_log_sources` against `datadog_integration_aws_available_logs_services`, and `datadog_integration_aws_iam_permissions` drives the policy chunking. A mock provider left to generate its own values returns empty lists, which silently reduces every filtered result to `[]` — and an assertion that a filtered list came back empty then passes for entirely the wrong reason. `tests/mocks/datadog/` pins all three.
+
+The same applies to `tests/mocks/aws/`, for a different reason: `aws_iam_policy` rejects a policy document that is not JSON, and CloudPrem's security group module rejects a `cidr_block` that is not a CIDR, so generated random strings fail at plan. Account, region, and partition are pinned as well, so the name-length assertions are deterministic.
+
+`tests/mocks/http/` exists because the forwarder module calls `jsondecode()` on its version manifest with no `try()` around it.
+
+### The random and local providers are used for real
+
+Only providers that would reach a network are mocked. `random` in particular **cannot** be mocked here: `module.datadog_secrets` uses `ephemeral.random_password`, and Terraform's provider mocking does not support ephemeral resource types. Both providers compute locally, so using them for real costs nothing.
+
+### The synthetic permission list is spelled out on purpose
+
+`tests/iam.tftest.hcl` carries 208 literal permission strings. They are not generated with a `for` expression because `override_data` values, and `.tfmock.hcl` defaults, must be literals — Terraform rejects function calls in both. The count is chosen so the arithmetic yields three chunks rather than two, since only a three-chunk split exercises a middle chunk, which is bounded on both sides and is where an off-by-one would hide.
+
+### Comparing lists needs tolist() on both sides
+
+The provider types attributes like `logs_config.lambda_forwarder.sources` as `list(string)`, while an HCL literal such as `["cloudtrail"]` is a tuple. Terraform's `==` reports `LHS and RHS values are of different types` instead of comparing element-wise, so both sides are wrapped in `tolist()`.
+
+### Tests pin datadog_site to datadoghq.com
+
+The forwarder module carries its own `dd_site` allowlist that omits `uk1.datadoghq.com` and `us2.ddog-gov.com`, both of which Datadog publishes and this module's validation accepts, and `module "datadog_forwarder"` is ungated — so a plan with either site fails inside a dependency. That gap is being raised upstream. Tests pin a site that is valid in both lists so no test outcome depends on the discrepancy, and none asserts that the two affected sites plan cleanly, which would couple this repository's CI to a third-party fix.
+
+### What the mocked tests cannot see
+
+Plan-mode tests assert against fixtures, which say what we already believe. Two things only the real API can report, so they live in `tests/integration-basic.tftest.hcl`: whether Datadog still advertises every namespace and log source the module asks for, since anything it does not is dropped with no error; and whether the live permission list still chunks under the 6144-byte managed policy limit, since that list grows whenever Datadog adds a permission, with no change to this repository.
+
+One limitation is worth knowing about the greenfield regression test in `tests/gates.tftest.hcl`. Terraform test cannot supply a genuinely unknown value, so `cluster_name = null` stands in for one. That is faithful for the property under test — re-deriving a gate from the name drops the count to zero and fails the test — but it diverges in one way: a literal null trips `aws_eks_pod_identity_association`'s required-attribute check where an unknown would plan cleanly, which is why that run leaves CloudPrem off.

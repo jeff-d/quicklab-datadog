@@ -1,0 +1,89 @@
+# This file is part of QuickLab, which creates simple, observable labs.
+# https://github.com/jeff-d/quicklab
+#
+# SPDX-FileCopyrightText: © 2025 Jeffrey M. Deininger <9385180+jeff-d@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Everything here runs without credentials: terraform validate plus the plan-mode test
+# suite in tests/, which mocks every provider that would otherwise reach a network. That
+# is what lets this workflow run on every commit and on pull requests from forks, where
+# no secret is available. The apply/destroy suite lives in integration.yaml.
+
+name: test
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+
+    # Run on every push, but on pull requests only from forks. A same-repo pull request
+    # already got a push event for the same commit, and without this it would be tested
+    # twice; a fork's push never reaches this repository, so the pull request is the only
+    # chance to test it.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Pinned to the version the suite is verified against, within the module's
+      # required_version = "~> 1.12.0".
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+
+      # Recursive so it covers tests/ and its mock fixtures as well as the root. Hidden
+      # directories are skipped, so vendored modules under .terraform are not checked.
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      # -backend=false because nothing here needs state; this only installs providers and
+      # the module tree so that validate and test have something to work with.
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      # Every test file except the integration ones, which need credentials this job does
+      # not have. The list is globbed rather than enumerated so a new test file is picked
+      # up without editing this workflow, and the match is negative on purpose: a file
+      # that does not opt out runs here, so the way to get missed is to deliberately name
+      # yourself integration-, not to forget a prefix.
+      #
+      # No -junit-xml: terraform test already names the failing run block and prints its
+      # assertion's error_message, and a report file is only worth producing if something
+      # consumes it, such as a reporter action that annotates the pull request.
+      - name: Terraform Test
+        run: terraform test -no-color $(ls tests/*.tftest.hcl | grep -v '/integration-' | sed 's|^|-filter=|')

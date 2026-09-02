@@ -304,8 +304,11 @@ resource "terraform_data" "datadog_aws_integration_ready" {
     aws_iam_role_policy_attachment.datadog_aws_integration,
   ]
 
+  # local-exec defaults to /bin/sh, which is dash on Debian-family runners (including GitHub's
+  # ubuntu-latest) and has no `-o pipefail`. Pin bash so the script's error handling holds there.
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
     set -euo pipefail
     ATTEMPTS=0
     MAX_ATTEMPTS=30
@@ -343,8 +346,10 @@ resource "terraform_data" "datadog_ccm_config_ready" {
     module.datadog_secrets,
   ]
 
+  # Pinned to bash for `-o pipefail`; see terraform_data.datadog_aws_integration_ready above.
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
     set -euo pipefail
     API_KEY=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$API_KEY_SECRET" --query SecretString --output text)
     APP_KEY=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$APP_KEY_SECRET" --query SecretString --output text)
