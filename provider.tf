@@ -7,7 +7,9 @@
 terraform {
 
   # required_version = "<= 1.5.7" #* latest version licensed under MPL 2.0
-  required_version = "~> 1.12.0"
+  # Minimums only: a reusable module states the oldest versions it works with and leaves upper
+  # bounds to the calling root module, so it never blocks a version the caller has chosen.
+  required_version = ">= 1.12"
 
   # Declared, not configured: a child module states which providers it needs and inherits the
   # configuration from the root. Every provider this module uses must be listed here, or
@@ -15,27 +17,27 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.0"
+      version = ">= 6.0"
     }
     datadog = {
       source  = "DataDog/datadog"
-      version = "~> 4.15.0"
+      version = ">= 4.15.0"
     }
     http = {
       source  = "hashicorp/http"
-      version = "~> 3.0"
+      version = ">= 3.0"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 3.1.0"
+      version = ">= 3.1.0"
     }
     local = {
       source  = "hashicorp/local"
-      version = "~> 2.5"
+      version = ">= 2.5"
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.7"
+      version = ">= 3.7"
     }
   }
 }
