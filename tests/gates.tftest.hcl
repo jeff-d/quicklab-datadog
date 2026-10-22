@@ -174,7 +174,7 @@ run "server_with_otelcol_skips_agent_installation" {
   variables {
     create_server               = true
     server_os                   = ["linux"]
-    server_otelcol              = true
+    observability_collector     = "otelcol"
     cluster_enabled             = true
     cluster_name                = "quicklab-ab12-cluster"
     create_byoc_k8s_deployments = true
@@ -183,12 +183,12 @@ run "server_with_otelcol_skips_agent_installation" {
 
   assert {
     condition     = length(aws_ssm_association.server_install) == 0
-    error_message = "server_otelcol should suppress Datadog Agent installation."
+    error_message = "observability_collector = \"otelcol\" should suppress Datadog Agent installation."
   }
 
   assert {
     condition     = length(aws_ssm_association.datadog_agent_cloudprem_logs) == 0
-    error_message = "server_otelcol should suppress the CloudPrem log-tailing association too."
+    error_message = "observability_collector = \"otelcol\" should suppress the CloudPrem log-tailing association too."
   }
 }
 
@@ -228,4 +228,14 @@ run "cloudprem_log_tailing_without_a_cluster" {
     condition     = length(aws_ssm_association.datadog_agent_cloudprem_logs) == 0
     error_message = "Without a cluster there is no CloudPrem ingress to tail, and creating the association indexes an empty data source."
   }
+}
+
+run "unknown_collector_is_rejected" {
+  command = plan
+
+  variables {
+    observability_collector = "ddot"
+  }
+
+  expect_failures = [var.observability_collector]
 }

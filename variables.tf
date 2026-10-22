@@ -67,10 +67,15 @@ variable "server_os" {
     error_message = "These list items must be \"linux\" and/or \"windows\" (case-sensitive)."
   }
 }
-variable "server_otelcol" {
-  type        = bool
-  description = "Bootstrap QuickLab servers with the OpenTelemetry Collector (agent)."
-  default     = false
+variable "observability_collector" {
+  type        = string
+  description = "The collector on QuickLab servers: \"ddagent\" (the Datadog Agent, installed by this module) or \"otelcol\" (the OpenTelemetry Collector, installed by the caller)."
+  default     = "ddagent"
+
+  validation {
+    condition     = contains(["ddagent", "otelcol"], var.observability_collector)
+    error_message = "Must be \"ddagent\" or \"otelcol\"."
+  }
 }
 variable "cluster_name" {
   type        = string

@@ -1,6 +1,10 @@
+locals {
+  server_agent = var.create_server && var.observability_collector == "ddagent"
+}
+
 # install datadog agent via configuration management
 resource "aws_ssm_association" "server_install" {
-  for_each         = var.create_server && !var.server_otelcol ? toset(var.server_os) : []
+  for_each         = local.server_agent ? toset(var.server_os) : []
   name             = "arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}:865078226113:document/datadog-agent-installation-${each.value}"
   association_name = "datadog-agent-installation-${each.value}_${var.prefix}-${var.uid}"
   parameters = merge(
@@ -34,7 +38,7 @@ resource "terraform_data" "datadog_tags" {
 }
 
 resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
-  count            = local.quicklab_cluster_enabled && var.create_server && !var.server_otelcol && var.create_byoc_k8s_deployments ? 1 : 0
+  count            = local.quicklab_cluster_enabled && local.server_agent && var.create_byoc_k8s_deployments ? 1 : 0
   name             = "AWS-RunShellScript"
   association_name = "datadog-agent-cloudprem-logs_${var.prefix}-${var.uid}"
 
@@ -109,7 +113,7 @@ resource "datadog_action_connection" "http" {
 
 # Workflow creates Fleet Automation configuration deployment
 resource "datadog_workflow_automation" "agent_config" {
-  count       = var.create_server && !var.server_otelcol ? 1 : 0
+  count       = local.server_agent ? 1 : 0
   name        = "Manage Datadog Agent Configuration"
   description = "Updates the configuration of scoped Datadog Agents on a schedule via a Fleet Automation configuration deployment."
   published   = true
@@ -226,7 +230,7 @@ resource "datadog_workflow_automation" "agent_config" {
 
 # Audit Trail Monitor to trigger Workflow
 resource "datadog_monitor" "new_datadog_agent" {
-  count = var.create_server && !var.server_otelcol ? 1 : 0
+  count = local.server_agent ? 1 : 0
 
   name             = "New Datadog Agent Installed"
   type             = "audit alert"
