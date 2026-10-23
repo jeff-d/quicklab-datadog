@@ -6,6 +6,8 @@
 
 
 locals {
+  cluster_agent = local.quicklab_cluster_enabled && var.observability_collector == "ddagent"
+
   datadog_operator_helm_chart_version = "2.19.1" # corresponds to App version 1.24.0
   datadog_operator_helm_release_name  = "datadog-operator"
   datadog_operator_namespace          = "datadog"
@@ -79,7 +81,7 @@ locals {
 }
 
 resource "helm_release" "datadog_operator" {
-  count      = local.quicklab_cluster_enabled ? 1 : 0
+  count      = local.cluster_agent ? 1 : 0
   depends_on = [var.kubeconfig_ready]
 
   name       = local.datadog_operator_helm_release_name
@@ -101,7 +103,7 @@ resource "helm_release" "datadog_operator" {
 # triggers_replace hashes the keys (rather than omitting them) so a rotation actually
 # reaches the cluster; hashing keeps plaintext out of plan output.
 resource "terraform_data" "datadog_agent_secrets" {
-  count      = local.quicklab_cluster_enabled ? 1 : 0
+  count      = local.cluster_agent ? 1 : 0
   depends_on = [helm_release.datadog_operator] # creates the namespace (create_namespace = true)
 
   triggers_replace = [
@@ -142,7 +144,7 @@ resource "terraform_data" "datadog_agent_secrets" {
 }
 
 resource "local_file" "datadog_agent_manifest" {
-  count = local.quicklab_cluster_enabled ? 1 : 0
+  count = local.cluster_agent ? 1 : 0
 
   content = templatefile(
     "${path.module}/templates/DatadogAgent-deployment.tftpl",
@@ -162,7 +164,7 @@ resource "local_file" "datadog_agent_manifest" {
 }
 
 resource "terraform_data" "datadog_agent_manifest" {
-  count = local.quicklab_cluster_enabled ? 1 : 0
+  count = local.cluster_agent ? 1 : 0
   # Deliberately not ordered after helm_release.cloudprem: the CR references CloudPrem only as
   # a DNS string, never as a Kubernetes object, so the edge buys no correctness and instead
   # couples failures. helm_release.cloudprem sets atomic = true, so a failed CloudPrem install

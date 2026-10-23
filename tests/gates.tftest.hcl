@@ -230,6 +230,36 @@ run "cloudprem_log_tailing_without_a_cluster" {
   }
 }
 
+# With the OpenTelemetry collector, qlpoc installs kube-stack on the cluster instead, so the
+# Operator, the DatadogAgent and the Operator's API key are left out. The application key stays:
+# CloudPrem's deregistration reads it.
+run "cluster_with_otelcol_skips_the_operator" {
+  command = plan
+
+  variables {
+    observability_collector     = "otelcol"
+    cluster_enabled             = true
+    cluster_name                = "quicklab-ab12-cluster"
+    create_byoc_k8s_deployments = true
+    vpc_id                      = "vpc-0123456789abcdef0"
+  }
+
+  assert {
+    condition     = length(helm_release.datadog_operator) + length(terraform_data.datadog_agent_secrets) + length(local_file.datadog_agent_manifest) + length(terraform_data.datadog_agent_manifest) == 0
+    error_message = "observability_collector = \"otelcol\" should suppress the Datadog Operator and the DatadogAgent."
+  }
+
+  assert {
+    condition     = !contains(keys(datadog_api_key.this), "kubernetes-operator") && contains(keys(datadog_application_key.this), "kubernetes-operator")
+    error_message = "With \"otelcol\", only the kubernetes-operator application key (for CloudPrem) should remain, got API keys: ${join(", ", keys(datadog_api_key.this))}"
+  }
+
+  assert {
+    condition     = length(helm_release.cloudprem) == 1
+    error_message = "CloudPrem doesn't need the Operator and should still deploy with \"otelcol\"."
+  }
+}
+
 run "unknown_collector_is_rejected" {
   command = plan
 
