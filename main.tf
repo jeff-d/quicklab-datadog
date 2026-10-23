@@ -21,7 +21,8 @@ locals {
   quicklab_cluster_enabled = var.cluster_enabled
 
   datadog_secrets = {
-    api_keys = concat(["agent-installation", "workflow-automation", "log-forwarder"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
+    api_keys = concat(["agent-installation", "workflow-automation", "log-forwarder"], var.create_byoc_k8s_deployments ? ["cloudprem"] : [], local.cluster_agent ? ["kubernetes-operator"] : [])
+    # CloudPrem's deregistration also reads the kubernetes-operator application key, so it stays with any cluster.
     app_keys = concat(["workflow-automation"], local.quicklab_cluster_enabled ? ["kubernetes-operator"] : [])
   }
 }
