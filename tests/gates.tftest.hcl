@@ -44,6 +44,11 @@ run "cluster_enabled_adds_the_operator" {
     error_message = "Enabling the cluster should deploy the Datadog Operator."
   }
 
+  assert {
+    condition     = helm_release.datadog_operator[0].version == "2.31.0"
+    error_message = "The Operator chart should be the newest stable entry in the Helm index, skipping prereleases, got: ${helm_release.datadog_operator[0].version}"
+  }
+
   # The operator alone does not imply CloudPrem; that needs the second flag.
   assert {
     condition     = length(helm_release.cloudprem) == 0
