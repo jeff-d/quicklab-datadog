@@ -8,9 +8,11 @@
 locals {
   cluster_agent = local.quicklab_cluster_enabled && var.observability_collector == "ddagent"
 
-  datadog_operator_helm_chart_version = "2.19.1" # corresponds to App version 1.24.0
-  datadog_operator_helm_release_name  = "datadog-operator"
-  datadog_operator_namespace          = "datadog"
+  datadog_operator_helm_chart_version = local.cluster_agent ? [
+    for c in yamldecode(data.http.datadog_helm_index[0].response_body).entries["datadog-operator"] : c.version if !strcontains(c.version, "-")
+  ][0] : null
+  datadog_operator_helm_release_name = "datadog-operator"
+  datadog_operator_namespace         = "datadog"
 
   # Not "datadog-secret": that name is already taken in this namespace by the secret the
   # operator generates from the DatadogAgent CR's own credentials, so reusing it collides.
@@ -44,38 +46,40 @@ locals {
 
   datadog_agent_deployment = {
     features = {
-      logCollection                = true
-      logCollectionContainerAll    = true
-      liveProcessCollection        = true
-      liveContainerCollection      = true
-      processDiscovery             = true
-      oomKill                      = true
-      tcpQueueLength               = true
-      ebpfCheck                    = false
-      apm                          = true
-      asmThreats                   = true
-      asmSca                       = true
-      asmIast                      = true
-      cspm                         = var.enable_cloud_security
-      cws                          = var.enable_cloud_security
-      npm                          = true
-      usm                          = true
-      dogstatsdUnixDomainSocket    = true
-      otlpGrpc                     = false
-      remoteConfiguration          = true
-      sbom                         = true
-      sbomContainerImage           = true
-      sbomHost                     = true
-      serviceDiscovery             = true
-      serviceDiscoveryNetworkStats = true
-      gpu                          = false
-      collectKubernetesEvents      = true
-      orchestratorExplorer         = true
-      kubeStateMetricsCore         = true
-      admissionController          = true
-      externalMetricsServer        = true
-      clusterChecks                = true
-      prometheusScrape             = false
+      logCollection             = true
+      logCollectionContainerAll = true
+      liveProcessCollection     = true
+      liveContainerCollection   = true
+      processDiscovery          = true
+      oomKill                   = true
+      tcpQueueLength            = true
+      ebpfCheck                 = false
+      apm                       = true
+      apmInjectionMode          = "csi"
+      asmThreats                = true
+      asmSca                    = true
+      asmIast                   = true
+      cspm                      = var.enable_cloud_security
+      cws                       = var.enable_cloud_security
+      npm                       = true
+      usm                       = true
+      dogstatsdUnixDomainSocket = true
+      otlpGrpc                  = true
+      otlpHttp                  = true
+      otlpLogs                  = true
+      remoteConfiguration       = true
+      sbom                      = true
+      sbomContainerImage        = true
+      sbomHost                  = true
+      serviceDiscovery          = true
+      gpu                       = false
+      collectKubernetesEvents   = true
+      orchestratorExplorer      = true
+      kubeStateMetricsCore      = true
+      admissionController       = true
+      externalMetricsServer     = true
+      clusterChecks             = true
+      prometheusScrape          = false
     }
   }
 }
@@ -184,13 +188,22 @@ resource "terraform_data" "datadog_agent_manifest" {
   ]
 
   provisioner "local-exec" {
-    when    = create
-    command = <<-EOT
+    when        = create
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+    set -e
     export KUBECONFIG=~/.kube/$CLUSTER_NAME
     kubectl apply -f "$MANIFEST_PATH"
+    for i in $(seq 60); do
+      kubectl -n "$NAMESPACE" get deployment/datadog-cluster-agent daemonset/datadog-agent >/dev/null 2>&1 && break
+      sleep 5
+    done
+    kubectl -n "$NAMESPACE" rollout status deployment/datadog-cluster-agent --timeout=600s &&
+      kubectl -n "$NAMESPACE" rollout status daemonset/datadog-agent --timeout=600s
     EOT
     environment = {
       CLUSTER_NAME  = var.cluster_name
+      NAMESPACE     = local.datadog_operator_namespace
       MANIFEST_PATH = local_file.datadog_agent_manifest[0].filename
     }
   }

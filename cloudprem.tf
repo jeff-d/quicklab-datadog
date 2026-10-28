@@ -4,7 +4,7 @@ data "aws_vpc" "quicklab" {
 }
 
 data "http" "datadog_helm_index" {
-  count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
+  count = (local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments) || local.cluster_agent ? 1 : 0
   url   = "https://helm.datadoghq.com/index.yaml"
 
   retry {

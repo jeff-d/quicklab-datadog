@@ -15,6 +15,8 @@ spec:
       appSecret:
         secretName: ${DATADOG_KEYS_SECRET}
         keyName: app-key
+    csi:
+      enabled: ${DATADOG_AGENT_DEPLOYMENT.features.apm}
 %{ if CLOUDPREM_INDEXER_URL != "" ~}
     env:
       - name: DD_LOGS_CONFIG_LOGS_DD_URL
@@ -47,6 +49,7 @@ spec:
     apm:
       instrumentation:
         enabled: ${DATADOG_AGENT_DEPLOYMENT.features.apm}
+        injectionMode: ${DATADOG_AGENT_DEPLOYMENT.features.apmInjectionMode}
     asm:
       threats:
         enabled: ${DATADOG_AGENT_DEPLOYMENT.features.asmThreats}
@@ -70,6 +73,8 @@ spec:
         protocols:
           grpc:
             enabled: ${DATADOG_AGENT_DEPLOYMENT.features.otlpGrpc}
+          http:
+            enabled: ${DATADOG_AGENT_DEPLOYMENT.features.otlpHttp}
     remoteConfiguration:
       enabled: ${DATADOG_AGENT_DEPLOYMENT.features.remoteConfiguration}
     sbom:
@@ -80,8 +85,6 @@ spec:
         enabled: ${DATADOG_AGENT_DEPLOYMENT.features.sbomHost}
     serviceDiscovery:
       enabled: ${DATADOG_AGENT_DEPLOYMENT.features.serviceDiscovery}
-      networkStats:
-        enabled: ${DATADOG_AGENT_DEPLOYMENT.features.serviceDiscoveryNetworkStats}
     gpu:
       enabled: ${DATADOG_AGENT_DEPLOYMENT.features.gpu}
     eventCollection:
@@ -100,6 +103,9 @@ spec:
       enabled: ${DATADOG_AGENT_DEPLOYMENT.features.prometheusScrape}
   override:
     nodeAgent:
+      env:
+        - name: DD_OTLP_CONFIG_LOGS_ENABLED
+          value: "${DATADOG_AGENT_DEPLOYMENT.features.otlpLogs}"
       tolerations:
         - key: karpenter.sh/controller
           operator: Exists

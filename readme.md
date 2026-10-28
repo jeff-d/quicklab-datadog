@@ -90,7 +90,23 @@ _Inline._
 
 ## kubernetes.tf
 
-_Inline._
+With `observability_collector = "ddagent"` (`local.cluster_agent`), this installs the Datadog Operator and a `DatadogAgent` rendered from `templates/DatadogAgent-deployment.tftpl`.
+
+### The Operator chart floats on the newest stable release
+
+`local.datadog_operator_helm_chart_version` is the newest entry in `https://helm.datadoghq.com/index.yaml` (`data.http.datadog_helm_index`, shared with CloudPrem) that isn't a prerelease, with no fallback. The floor is Operator 1.26, the first that manages the Datadog CSI driver, which single-step instrumentation's `csi` injection mode needs. Floating means a change to the `DatadogAgent` schema shows up at apply: Operator 1.31 removed `features.serviceDiscovery.networkStats`, and the API server rejected the old manifest under strict decoding.
+
+### Single-step instrumentation mounts its tracers through the CSI driver
+
+`global.csi.enabled` (following the APM setting) has the Operator install the CSI driver, and `features.apm.instrumentation.injectionMode: csi` mounts the injector and tracer libraries through it instead of copying them in with an init container per language. The default, `auto`, kept init containers with the driver running (Cluster Agent 7.84.1), so `csi` is explicit. In init-container mode, pods with no detected language got all six libraries, and `datadog-lib-ruby-init` was killed with exit 137.
+
+### The Agent's OTLP receiver takes logs too
+
+Workloads single-step instrumentation can't trace send OTLP to the node Agent (`otlpGrpc`, `otlpHttp`). The `DatadogAgent` has no field for OTLP logs, so `override.nodeAgent.env` sets `DD_OTLP_CONFIG_LOGS_ENABLED`; without it the Agent answers OTLP logs with `Unimplemented`, and workloads that log only over OTLP have no logs at all.
+
+### The manifest's apply waits for the Agents
+
+The Operator creates the Cluster Agent and the node Agents after `kubectl apply` returns. `terraform_data.datadog_agent_manifest` waits for both to exist and roll out, so workloads deployed after it get single-step instrumentation (the Cluster Agent's webhook only injects into pods created after it serves) and an OTLP receiver on their node. It runs under `set -e`, so a rejected manifest fails the apply at once instead of after the wait.
 
 ## main.tf
 
@@ -125,7 +141,7 @@ Three data sources are filters rather than decorations. `local.include_metric_na
 
 The same applies to `tests/mocks/aws/`, for a different reason: `aws_iam_policy` rejects a policy document that is not JSON, and CloudPrem's security group module rejects a `cidr_block` that is not a CIDR, so generated random strings fail at plan. Account, region, and partition are pinned as well, so the name-length assertions are deterministic.
 
-`tests/mocks/http/` exists because the forwarder module calls `jsondecode()` on its version manifest with no `try()` around it.
+`tests/mocks/http/` exists because the forwarder module calls `jsondecode()` on its version manifest with no `try()` around it. One mock covers every `http` data source, because `mock_data` keys on the type, not the address, so `data.http.datadog_helm_index` gets the same body. `yamldecode` parses JSON, so the body's `entries` supplies the Operator chart version (with a prerelease listed first, to test that it's skipped); the lookup for `entries["cloudprem"]` misses, and CloudPrem's `try()` falls back to its pinned version. Tests that care about chart resolution override the data source with a YAML fixture of their own.
 
 ### The random and local providers are used for real
 
