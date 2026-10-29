@@ -181,6 +181,7 @@ resource "terraform_data" "datadog_agent_manifest" {
     helm_release.datadog_operator,
     local_file.datadog_agent_manifest,
     terraform_data.datadog_agent_secrets,
+    terraform_data.datadog_agent_cleanup,
   ]
   triggers_replace = [
     var.cluster_name,
@@ -208,15 +209,20 @@ resource "terraform_data" "datadog_agent_manifest" {
       MANIFEST_PATH = local_file.datadog_agent_manifest[0].filename
     }
   }
+}
 
-  # Delete the CR (and wait for it) while the operator is still around to process its
-  # finalizer — depends_on above already sequences this before helm_release.datadog_operator
-  # is uninstalled.
+resource "terraform_data" "datadog_agent_cleanup" {
+  count            = local.cluster_agent ? 1 : 0
+  depends_on       = [helm_release.datadog_operator]
+  triggers_replace = [var.cluster_name, local.datadog_operator_namespace]
+
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
     export KUBECONFIG=~/.kube/$CLUSTER_NAME
     kubectl delete datadogagent datadog --namespace $NAMESPACE --ignore-not-found --wait=true --timeout=120s
+    kubectl wait --for=delete deployment/datadog-cluster-agent --namespace $NAMESPACE --timeout=120s 2>/dev/null || true
+    kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration datadog-webhook --ignore-not-found
     EOT
     environment = {
       CLUSTER_NAME = self.triggers_replace[0]

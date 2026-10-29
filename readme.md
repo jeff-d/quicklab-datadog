@@ -106,7 +106,11 @@ Workloads single-step instrumentation can't trace send OTLP to the node Agent (`
 
 ### The manifest's apply waits for the Agents
 
-The Operator creates the Cluster Agent and the node Agents after `kubectl apply` returns. `terraform_data.datadog_agent_manifest` waits for both to exist and roll out, so workloads deployed after it get single-step instrumentation (the Cluster Agent's webhook only injects into pods created after it serves) and an OTLP receiver on their node. It runs under `set -e`, so a rejected manifest fails the apply at once instead of after the wait.
+The Operator creates the Cluster Agent and the node Agents after `kubectl apply` returns. `terraform_data.datadog_agent_manifest` waits for both to exist and roll out, so workloads deployed after it get single-step instrumentation (the Cluster Agent's webhook only injects into pods created after it serves) and an OTLP receiver on their node. It runs under `set -e`, so a rejected manifest fails the apply at once instead of after the wait. A changed manifest is re-applied in place.
+
+### Removing the Agent is a separate, destroy-only resource
+
+`terraform_data.datadog_agent_cleanup` has no create step, so a failed apply can never taint it, and its destroy step always runs. That matters because Terraform skips destroy-time provisioners for tainted resources: when the deletion lived on the manifest resource, a failed rollout tainted it, the next switch to `"otelcol"` never deleted the `DatadogAgent`, and the Operator was uninstalled first, leaving the `DatadogAgent`, `DatadogAgentInternal` and `DatadogCSIDriver` on finalizers nothing could clear (the Cluster Agent and its webhook stayed alive). It depends on the Operator release and the manifest depends on it, so a destroy runs manifest, cleanup, Operator. The cleanup deletes the `DatadogAgent` while the Operator can still process its finalizer, waits for the Cluster Agent to be gone, then deletes the `datadog-webhook` MutatingWebhookConfiguration and ValidatingWebhookConfiguration the Cluster Agent registered, which have no owner reference.
 
 ### Single-step instrumentation can be limited to namespaces
 
