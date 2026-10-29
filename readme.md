@@ -104,6 +104,8 @@ With `observability_collector = "ddagent"` (`local.cluster_agent`), this install
 
 Workloads single-step instrumentation can't trace send OTLP to the node Agent (`otlpGrpc`, `otlpHttp`). The `DatadogAgent` has no field for OTLP logs, so `override.nodeAgent.env` sets `DD_OTLP_CONFIG_LOGS_ENABLED`; without it the Agent answers OTLP logs with `Unimplemented`, and workloads that log only over OTLP have no logs at all.
 
+`global.tags` carries `var.datadog_tags`, as the server Agents' install does. Besides tagging the nodes, it gives the Agent its default `env`: spans that arrive with no `env`, such as OTLP from an SDK that reports the pod rather than the node as its host (so no host tags apply) and sets no `deployment.environment.name`, otherwise get `env:none`.
+
 ### The manifest's apply waits for the Agents
 
 The Operator creates the Cluster Agent and the node Agents after `kubectl apply` returns. `terraform_data.datadog_agent_manifest` waits for both to exist and roll out, so workloads deployed after it get single-step instrumentation (the Cluster Agent's webhook only injects into pods created after it serves) and an OTLP receiver on their node. It runs under `set -e`, so a rejected manifest fails the apply at once instead of after the wait. A changed manifest is re-applied in place.

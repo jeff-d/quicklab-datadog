@@ -158,6 +158,7 @@ resource "local_file" "datadog_agent_manifest" {
       DATADOG_KEYS_SECRET            = local.datadog_agent_keys_secret
       DATADOG_AGENT_DEPLOYMENT       = local.datadog_agent_deployment
       APM_INSTRUMENTATION_NAMESPACES = var.apm_instrumentation_namespaces
+      DATADOG_TAGS                   = [for k, v in local.datadog_tags : "${k}:${v}" if v != null]
       # Scheme is required: without http:// the Agent defaults to HTTPS/TLS, CloudPrem
       # indexers speak plain HTTP on 7280, and the Agent falls back to TLS-TCP which
       # never ingest. Docs: https://docs.datadoghq.com/cloudprem/ingest/agent/
