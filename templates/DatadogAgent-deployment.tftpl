@@ -8,6 +8,7 @@ metadata:
 spec:
   global:
     site: ${DATADOG_SITE}
+    tags: ${jsonencode(DATADOG_TAGS)}
     credentials:
       apiSecret:
         secretName: ${DATADOG_KEYS_SECRET}
