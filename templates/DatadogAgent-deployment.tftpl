@@ -50,6 +50,9 @@ spec:
       instrumentation:
         enabled: ${DATADOG_AGENT_DEPLOYMENT.features.apm}
         injectionMode: ${DATADOG_AGENT_DEPLOYMENT.features.apmInjectionMode}
+%{ if length(APM_INSTRUMENTATION_NAMESPACES) > 0 ~}
+        enabledNamespaces: ${jsonencode(APM_INSTRUMENTATION_NAMESPACES)}
+%{ endif ~}
     asm:
       threats:
         enabled: ${DATADOG_AGENT_DEPLOYMENT.features.asmThreats}

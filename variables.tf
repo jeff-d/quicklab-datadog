@@ -82,6 +82,11 @@ variable "cluster_name" {
   default     = null
   description = "Name of the EKS cluster to integrate with Datadog. Set to null (or omit) when no QuickLab cluster is provisioned."
 }
+variable "apm_instrumentation_namespaces" {
+  type        = list(string)
+  default     = []
+  description = "Namespaces single-step instrumentation injects into. Empty (the default) instruments the whole cluster."
+}
 variable "cluster_enabled" {
   type        = bool
   default     = false
