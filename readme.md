@@ -108,6 +108,10 @@ Workloads single-step instrumentation can't trace send OTLP to the node Agent (`
 
 The Operator creates the Cluster Agent and the node Agents after `kubectl apply` returns. `terraform_data.datadog_agent_manifest` waits for both to exist and roll out, so workloads deployed after it get single-step instrumentation (the Cluster Agent's webhook only injects into pods created after it serves) and an OTLP receiver on their node. It runs under `set -e`, so a rejected manifest fails the apply at once instead of after the wait.
 
+### Single-step instrumentation can be limited to namespaces
+
+`var.apm_instrumentation_namespaces` becomes the `DatadogAgent`'s `features.apm.instrumentation.enabledNamespaces`; empty (the default) instruments the whole cluster. QuickLab passes the demo's namespace, so pods created elsewhere while the Cluster Agent's webhook is still running, such as kube-stack's during a switch to `"otelcol"`, aren't injected with CSI volumes their departing driver can no longer mount.
+
 ## main.tf
 
 _Inline._
