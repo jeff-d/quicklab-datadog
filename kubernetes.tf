@@ -56,6 +56,7 @@ locals {
       ebpfCheck                 = false
       apm                       = true
       apmInjectionMode          = "csi"
+      apmProfiling              = "auto"
       asmThreats                = true
       asmSca                    = true
       asmIast                   = true
