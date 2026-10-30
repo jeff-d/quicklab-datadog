@@ -217,6 +217,11 @@ run "cloudprem_log_tailing_with_server_cluster_and_byoc" {
     condition     = length(aws_ssm_association.datadog_agent_cloudprem_logs) == 1
     error_message = "A server plus a cluster plus BYOC should create the CloudPrem log-tailing association."
   }
+
+  assert {
+    condition     = contains([for t in aws_ssm_association.datadog_agent_cloudprem_logs[0].targets : t.key], "tag:os")
+    error_message = "The CloudPrem log-tailing association should target servers by os, or it also runs on the cluster's nodes."
+  }
 }
 
 run "cloudprem_log_tailing_without_a_cluster" {
