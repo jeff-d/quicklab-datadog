@@ -57,6 +57,8 @@ locals {
       apm                       = true
       apmInjectionMode          = "csi"
       apmProfiling              = "auto"
+      hostProfiler              = true
+      hostProfilerImage         = "registry.datadoghq.com/ddot-ebpf:7.81.0-preview-host-profiler-1.0"
       asmThreats                = true
       asmSca                    = true
       asmIast                   = true

@@ -5,6 +5,11 @@ kind: DatadogAgent
 metadata:
   name: datadog
   namespace: ${DATADOG_OPERATOR_NAMESPACE}
+%{ if DATADOG_AGENT_DEPLOYMENT.features.hostProfiler ~}
+  annotations:
+    agent.datadoghq.com/host-profiler-enabled: "true"
+    experimental.agent.datadoghq.com/image-override-config: '${jsonencode({ "host-profiler" = { name = DATADOG_AGENT_DEPLOYMENT.features.hostProfilerImage } })}'
+%{ endif ~}
 spec:
   global:
     site: ${DATADOG_SITE}
@@ -114,6 +119,27 @@ spec:
         - key: karpenter.sh/controller
           operator: Exists
           effect: NoSchedule
+%{ if DATADOG_AGENT_DEPLOYMENT.features.hostProfiler ~}
+      containers:
+        host-profiler:
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["BPF", "PERFMON", "SYS_PTRACE", "SYS_RESOURCE", "DAC_READ_SEARCH", "SYSLOG", "CHECKPOINT_RESTORE", "IPC_LOCK"]
+            appArmorProfile:
+              type: Unconfined
+            seLinuxOptions:
+              type: spc_t
+          resources:
+            requests:
+              cpu: "0"
+              memory: "0"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+%{ endif ~}
     clusterAgent:
       env:
         - name: DD_ADMISSION_CONTROLLER_AUTO_INSTRUMENTATION_PROFILING_ENABLED
