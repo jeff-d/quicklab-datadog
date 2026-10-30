@@ -38,9 +38,15 @@ resource "terraform_data" "datadog_tags" {
 }
 
 resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
-  count            = local.quicklab_cluster_enabled && local.server_agent && var.create_byoc_k8s_deployments ? 1 : 0
+  count            = local.quicklab_cluster_enabled && local.server_agent && var.create_byoc_k8s_deployments && contains(var.server_os, "linux") ? 1 : 0
   name             = "AWS-RunShellScript"
   association_name = "datadog-agent-cloudprem-logs_${var.prefix}-${var.uid}"
+
+  # quicklab-id alone also matches the cluster's nodes
+  targets {
+    key    = "tag:os"
+    values = ["linux"]
+  }
 
   targets {
     key    = "tag:quicklab-id"
@@ -53,8 +59,10 @@ resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
   # makes the write idempotent: tee -a alone accumulates duplicate lines every time the
   # association re-runs. http:// and :80 are both required — the ALB has no 443 listener,
   # and without a scheme the Agent defaults to TLS and never ingests.
+  # The provider passes each parameter as a single-element list, so a jsonencoded list
+  # arrives as one literal command; a newline-joined string runs as a script.
   parameters = {
-    commands = jsonencode([
+    commands = join("\n", [
       "sudo touch /etc/datadog-agent/environment",
       "sudo sed -i '/^DD_LOGS_CONFIG_/d' /etc/datadog-agent/environment",
       "printf 'DD_LOGS_CONFIG_LOGS_DD_URL=http://${data.aws_lb.cloudprem_ingress[0].dns_name}:80\\nDD_LOGS_CONFIG_FORCE_USE_HTTP=true\\nDD_LOGS_CONFIG_EXPECTED_TAGS_DURATION=87600h\\n' | sudo tee -a /etc/datadog-agent/environment",
@@ -62,7 +70,7 @@ resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
     ])
   }
 
-  depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint]
+  depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint, aws_ssm_association.server_install]
 }
 
 # enable Workflows to work with the Datadog API
