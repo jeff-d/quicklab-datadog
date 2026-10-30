@@ -115,6 +115,9 @@ spec:
           operator: Exists
           effect: NoSchedule
     clusterAgent:
+      env:
+        - name: DD_ADMISSION_CONTROLLER_AUTO_INSTRUMENTATION_PROFILING_ENABLED
+          value: "${DATADOG_AGENT_DEPLOYMENT.features.apmProfiling}"
       tolerations:
         - key: karpenter.sh/controller
           operator: Exists

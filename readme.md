@@ -104,6 +104,8 @@ With `observability_collector = "ddagent"` (`local.cluster_agent`), this install
 
 Workloads single-step instrumentation can't trace send OTLP to the node Agent (`otlpGrpc`, `otlpHttp`). The `DatadogAgent` has no field for OTLP logs, so `override.nodeAgent.env` sets `DD_OTLP_CONFIG_LOGS_ENABLED`; without it the Agent answers OTLP logs with `Unimplemented`, and workloads that log only over OTLP have no logs at all.
 
+The Cluster Agent's `DD_ADMISSION_CONTROLLER_AUTO_INSTRUMENTATION_PROFILING_ENABLED=auto` turns on Datadog's Continuous Profiler through single-step instrumentation ([Preview](https://docs.datadoghq.com/profiler/enabling/ssi/)): every process the webhook injects starts with `DD_PROFILING_ENABLED=auto`, and its tracer profiles the processes worth profiling (Java, .NET on x86_64, Node.js and Python), with no per-service setting. It's the `DatadogAgent` route Datadog documents for the Operator, which has no field for it.
+
 `global.tags` carries `var.datadog_tags`, as the server Agents' install does. Besides tagging the nodes, it gives the Agent its default `env`: spans that arrive with no `env`, such as OTLP from an SDK that reports the pod rather than the node as its host (so no host tags apply) and sets no `deployment.environment.name`, otherwise get `env:none`.
 
 ### The manifest's apply waits for the Agents
