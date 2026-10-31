@@ -19,7 +19,11 @@ Where an ordering or a value is not recoverable from reading a resource in isola
 
 ## agent.tf
 
-_Inline._
+### Server log collection is split between Fleet Automation and SSM
+
+Fleet Automation can write the Agent's configuration files but nothing else on the host, and it rejects `logs_dd_url`. So the work is split three ways. The workflow fired by the "New Datadog Agent Installed" monitor sends one deployment with two config operations: `logs_enabled` in `datadog.yaml`, and a `conf.d/logs.d` file with the same sources the otelcol server collects. Those are journald, the audit log (service and source `linux-audit-logs`, which the Linux Audit Logs pipeline matches on) and `dnf.log`. `dnf.log` is read from the beginning, because the Agent starts after dnf has run at boot. Keeping both operations in one deployment also means a later deployment can't drop one of them. An SSM association gives `dd-agent` read access, by adding it to `systemd-journal` and setting auditd's `log_group = dd-agent`, which also covers rotated audit logs. With CloudPrem, a second association points `logs_dd_url` at its internal load balancer. Both associations wait for the install association to create the Agent's unit, since on a new instance all of them start at boot in no fixed order.
+
+On a server that still ran an OpenTelemetry Collector after a switch from `"otelcol"`, Fleet listed the collector on the host and its config deployments failed with "No packages were eligible for update" (tested 2026-10-30). The same deployment succeeded on a fresh server, and qlpoc now replaces the server when `observability_collector` changes.
 
 ## aws-integration.tf
 

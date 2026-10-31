@@ -76,6 +76,37 @@ resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
   depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint]
 }
 
+# Fleet Automation configures the log sources but cannot change host permissions: the
+# journal is readable only by the systemd-journal group, and the audit log only by root.
+# auditd's log_group (https://docs.datadoghq.com/integrations/linux-audit-logs/) also
+# covers rotated logs. auditd refuses systemctl restart, so service restarts it.
+resource "aws_ssm_association" "datadog_agent_log_permissions" {
+  count            = local.server_agent && contains(var.server_os, "linux") ? 1 : 0
+  name             = "AWS-RunShellScript"
+  association_name = "datadog-agent-log-permissions_${var.prefix}-${var.uid}"
+
+  targets {
+    key    = "tag:os"
+    values = ["linux"]
+  }
+
+  targets {
+    key    = "tag:quicklab-id"
+    values = [var.uid]
+  }
+
+  parameters = {
+    commands = join("\n", [
+      "for i in $(seq 60); do systemctl cat datadog-agent >/dev/null 2>&1 && break; sleep 10; done",
+      "sudo usermod -aG systemd-journal dd-agent",
+      "sudo sed -i '/^log_group\\s*=/d' /etc/audit/auditd.conf",
+      "echo 'log_group = dd-agent' | sudo tee -a /etc/audit/auditd.conf",
+      "sudo service auditd restart",
+      "sudo systemctl restart datadog-agent"
+    ])
+  }
+}
+
 # enable Workflows to work with the Datadog API
 #! no Datadog Action Connection resource exists in datadog terraform provider 3.83.0
 resource "datadog_action_connection" "http" {
@@ -173,22 +204,38 @@ resource "datadog_workflow_automation" "agent_config" {
               value = {
                 data = {
                   attributes = {
-                    config_operations = [{
-                      file_op   = "merge-patch"
-                      file_path = "/datadog.yaml"
-                      patch = {
-                        process_config = {
-                          process_collection = {
-                            enabled = true
+                    config_operations = [
+                      {
+                        file_op   = "merge-patch"
+                        file_path = "/datadog.yaml"
+                        patch = {
+                          process_config = {
+                            process_collection = {
+                              enabled = true
+                            }
+                          }
+                          logs_enabled = true
+                          logs_config = {
+                            # logs_dd_url                  = try("https://${data.aws_lb.cloudprem_ingress[0].dns_name}", null) #! (August, 2026) setting logs_dd_url is not supported in fleet automation: https://github.com/DataDog/dd-source/blob/84e3366b38b818ff147c662af5e59e09bb35f550/domains/remote-config/shared/libs/config-validator/schemas/INSTALLER_CONFIG/datadog.json#L616
+                            file_wildcard_selection_mode = "by_modification_time"
                           }
                         }
-                        logs_enabled = true
-                        logs_config = {
-                          # logs_dd_url                  = try("https://${data.aws_lb.cloudprem_ingress[0].dns_name}", null) #! (August, 2026) setting logs_dd_url is not supported in fleet automation: https://github.com/DataDog/dd-source/blob/84e3366b38b818ff147c662af5e59e09bb35f550/domains/remote-config/shared/libs/config-validator/schemas/INSTALLER_CONFIG/datadog.json#L616
-                          file_wildcard_selection_mode = "by_modification_time"
+                      },
+                      {
+                        # the same sources the otelcol server collects
+                        file_op   = "merge-patch"
+                        file_path = "/conf.d/logs.d/conf.yaml"
+                        patch = {
+                          logs = [
+                            { type = "journald", path = "/var/log/journal", service = "journald", source = "journald" },
+                            # https://docs.datadoghq.com/integrations/linux-audit-logs/: the log pipeline matches on this service and source
+                            { type = "file", path = "/var/log/audit/audit.log", service = "linux-audit-logs", source = "linux-audit-logs" },
+                            # beginning, not the default end: the Agent starts after dnf has run at boot
+                            { type = "file", path = "/var/log/dnf.log", service = "dnf", source = "dnf", start_position = "beginning" },
+                          ]
                         }
-                      }
-                    }]
+                      },
+                    ]
                     filter_query = "quicklab-id:{{ Trigger.this_quicklab_id }} AND hostname:{{ Trigger.datadog_agent_hostname }}" # compound filter_query can result in a failed workflow execution: "quicklab-id:${var.uid} AND -enabled_products:logs"
                   }
                   type = "deployment"
