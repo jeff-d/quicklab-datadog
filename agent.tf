@@ -61,8 +61,11 @@ resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
   # and without a scheme the Agent defaults to TLS and never ingests.
   # The provider passes each parameter as a single-element list, so a jsonencoded list
   # arrives as one literal command; a newline-joined string runs as a script.
+  # On a new instance both associations start at boot in no fixed order, so the script
+  # waits up to 10 minutes for the install association to create the Agent's unit.
   parameters = {
     commands = join("\n", [
+      "for i in $(seq 60); do systemctl cat datadog-agent >/dev/null 2>&1 && break; sleep 10; done",
       "sudo touch /etc/datadog-agent/environment",
       "sudo sed -i '/^DD_LOGS_CONFIG_/d' /etc/datadog-agent/environment",
       "printf 'DD_LOGS_CONFIG_LOGS_DD_URL=http://${data.aws_lb.cloudprem_ingress[0].dns_name}:80\\nDD_LOGS_CONFIG_FORCE_USE_HTTP=true\\nDD_LOGS_CONFIG_EXPECTED_TAGS_DURATION=87600h\\n' | sudo tee -a /etc/datadog-agent/environment",
@@ -70,7 +73,7 @@ resource "aws_ssm_association" "datadog_agent_cloudprem_logs" {
     ])
   }
 
-  depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint, aws_ssm_association.server_install]
+  depends_on = [aws_secretsmanager_secret_version.cloudprem_ingress_endpoint]
 }
 
 # enable Workflows to work with the Datadog API
