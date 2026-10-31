@@ -27,7 +27,13 @@ _Inline._
 
 ## cloudprem.tf
 
-_Inline._
+### The internal load balancer is open to the VPC, not the internet
+
+CloudPrem's internal ingress carries `alb.ingress.kubernetes.io/inbound-cidrs` set to the VPC's CIDR (`VPC_CIDR`, from `data.aws_vpc.quicklab`). Without it the load balancer controller opens port 80 to `0.0.0.0/0`, and an account guardrail (the `security-config-enforce` role) revokes any rule open to the internet within seconds, leaving the load balancer's security group with no inbound rules: nothing could reach CloudPrem, so the Agents' logs had nowhere to go. A VPC-scoped rule is all the server, the gateway and the cluster need, and the guardrail leaves it alone.
+
+### CloudPrem takes logs from the Datadog Agent, not OTLP
+
+The internal load balancer (HTTP on port 80) routes only Quickwit, Elasticsearch and Datadog-format (`/api/v2/logs`) ingest paths to the indexer, and the server's Agent sends to it with `DD_LOGS_CONFIG_LOGS_DD_URL`. Chart 0.5.6 also ships an optional OTLP `intake` component, off by default, whose container runs `pomsky-intake`, a program no published CloudPrem image contains yet (`v0.1.35`, `cp-v0.1.36-rc1`, `edge`; tested 2026-10-30), so it stays off and OpenTelemetry collectors don't send to CloudPrem (qlpoc README).
 
 ## cloudtrail.tf
 
