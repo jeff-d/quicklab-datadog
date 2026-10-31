@@ -169,6 +169,11 @@ run "server_enabled_installs_the_agent_once_per_os" {
     condition     = aws_ssm_association.server_install["linux"].association_name == "datadog-agent-installation-linux_quicklab-ab12"
     error_message = "Unexpected association name: ${aws_ssm_association.server_install["linux"].association_name}"
   }
+
+  assert {
+    condition     = length(aws_ssm_association.datadog_agent_log_permissions) == 1
+    error_message = "A linux server running the Agent should get the log-permissions association, with or without CloudPrem."
+  }
 }
 
 # The OpenTelemetry collector replaces the Datadog Agent rather than joining it, so both
@@ -194,6 +199,11 @@ run "server_with_otelcol_skips_agent_installation" {
   assert {
     condition     = length(aws_ssm_association.datadog_agent_cloudprem_logs) == 0
     error_message = "observability_collector = \"otelcol\" should suppress the CloudPrem log-tailing association too."
+  }
+
+  assert {
+    condition     = length(aws_ssm_association.datadog_agent_log_permissions) == 0
+    error_message = "observability_collector = \"otelcol\" should suppress the log-permissions association too."
   }
 }
 
