@@ -30,11 +30,10 @@ metastore:
 
 ingress:
   internal:
-%{ if INTERNAL_LB_NAME != null && INTERNAL_LB_NAME != "" ~}
     extraAnnotations:
+      alb.ingress.kubernetes.io/inbound-cidrs: ${VPC_CIDR}
+%{ if INTERNAL_LB_NAME != null && INTERNAL_LB_NAME != "" ~}
       alb.ingress.kubernetes.io/load-balancer-name: ${INTERNAL_LB_NAME}
-%{ else ~}
-    extraAnnotations: {}
 %{ endif ~}
 
 control_plane:

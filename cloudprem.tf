@@ -60,6 +60,7 @@ resource "local_file" "cloudprem_values" {
       SERVICE_ACCOUNT_NAME = "${var.prefix}-${var.uid}-${local.module}-cloudprem"
       S3_BUCKET_ID         = aws_s3_bucket.cloudprem[0].id
       INTERNAL_LB_NAME     = local.cloudprem.internal_lb_name
+      VPC_CIDR             = data.aws_vpc.quicklab[0].cidr_block
     }
   )
   filename        = "${path.module}/templates/cloudprem-values.yaml"
