@@ -7,8 +7,9 @@
 # Mac OS
 .DS_Store
 
-# Microsoft RDP connection files
-*.rdp
+# Agent instructions (local only)
+AGENTS.md
+.claude/
 
 # all temporary files
 **/tmp/*
@@ -17,7 +18,7 @@
 *values.yaml
 
 # Terraform-generated Kubernetes manifests
-templates/DatadogAgent-deployment.yaml
+templates/*.yaml
 
 # Kubeconfig files
 *kubeconfig*
