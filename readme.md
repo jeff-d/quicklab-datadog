@@ -13,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 Why the configuration is shaped the way it is, file by file. There is a section per resource-creating file; the ones marked _inline_ still carry their reasoning as comments in the code and have not been moved yet.
 
-This module is consumed by [jeff-d/qlpoc](https://github.com/jeff-d/qlpoc) as `module.datadog`, resolved from `main`, so a change reaches a lab only once it is pushed and picked up by `terraform init -upgrade`. The rules these notes answer to — single-shot apply, single-shot destroy, controller lifetimes — are in that repo's `AGENTS.md`, and how the two repos are wired to each other (the reference-carrier variables, the namespace teardown barrier) is in its readme under "Terraform Implementation Details / Datadog". What follows is this module's own internals.
+This module is consumed by [jeff-d/qlpoc](https://github.com/jeff-d/qlpoc) as `module.datadog`, pinned to the `v1.0.0` tag (`?ref=v1.0.0`), which moves with every change to this module, so a change reaches a lab only once it is pushed, the tag is moved, and the lab runs `terraform get -update`. The rules these notes answer to — single-shot apply, single-shot destroy, controller lifetimes — are in that repo's `AGENTS.md`, and how the two repos are wired to each other (the reference-carrier variables, the teardown ordering) is in its readme under "Terraform Implementation Details / Datadog". What follows is this module's own internals.
 
 Where an ordering or a value is not recoverable from reading a resource in isolation, the code carries a one-line marker pointing back here, in the form `# see readme.md "Terraform Implementation Details / <file>"`. Treat those markers as load-bearing.
 
