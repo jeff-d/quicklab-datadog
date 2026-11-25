@@ -94,10 +94,11 @@ resource "helm_release" "cloudprem" {
 resource "terraform_data" "cloudprem_secrets" {
   count = local.quicklab_cluster_enabled && var.create_byoc_k8s_deployments ? 1 : 0
   # Cluster-component resources are out of scope here, so all three edges arrive as opaque
-  # variables. They are anchored on this resource, whose destroy provisioner deletes the
-  # namespace, rather than on helm_release.cloudprem: everything in the namespace is torn down
-  # before the namespace itself, so one edge here orders the whole teardown. Moving them to the
-  # release would leave the namespace delete racing the controller.
+  # variables. They are anchored on this resource rather than on helm_release.cloudprem: the
+  # release depends on this resource, so on destroy the release is uninstalled first, then this
+  # resource, and only then the controller and the NodePool. Helm's uninstall waits for the
+  # Ingress to disappear, which needs the controller to clear its finalizer, so the controller
+  # has to outlive the release.
   # See ../qlpoc/readme.md "Terraform Implementation Details / Datadog".
   depends_on       = [var.kubeconfig_ready, var.lbc_ready, var.karpenter_ready]
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
@@ -122,26 +123,17 @@ resource "terraform_data" "cloudprem_secrets" {
     }
   }
 
-  # This delete is the barrier that keeps aws-load-balancer-controller alive until the Ingress
-  # finalizer clears. Bounded so a finalizer with no controller left to clear it fails loudly
-  # instead of hanging, and deliberately carrying no `|| true` -- unlike the deletes in
-  # ../qlpoc/cluster.tf, nothing sweeps up behind this one. 600s because the finalizer chain
-  # (ALB, ENIs, target groups, security group rules) runs 4-7 minutes.
-  # See ../qlpoc/readme.md "Terraform Implementation Details / Datadog".
+  # Removes the credentials the create step put in the cluster. It does not wait for the
+  # namespace: by the time it runs, Helm's uninstall has already waited for the Ingress (and so
+  # its ALB) to be gone, so there is nothing left for the controller to clean up. A finalizer
+  # that never clears fails that uninstall at its timeout instead. The namespace itself stays,
+  # empty, when only CloudPrem is switched off; it goes with the cluster.
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
     export KUBECONFIG=~/.kube/$CLUSTER_NAME
     kubectl delete secret datadog-secret --namespace $NAMESPACE --ignore-not-found
     kubectl delete secret cloudprem-metastore-uri --namespace $NAMESPACE --ignore-not-found
-    kubectl delete namespace $NAMESPACE --ignore-not-found --wait=true --timeout=600s && exit 0
-    # kubectl can give up moments before the namespace controller finishes, so re-check rather
-    # than failing a teardown that actually completed.
-    kubectl get namespace $NAMESPACE --ignore-not-found -o name 2>/dev/null | grep -q . || exit 0
-    echo "ERROR: namespace $NAMESPACE did not finalize within 600s; still present:" 1>&2
-    kubectl get all,ingress --namespace $NAMESPACE 1>&2
-    kubectl get namespace $NAMESPACE -o jsonpath='{.status.conditions}' 1>&2
-    exit 1
     EOT
     environment = {
       CLUSTER_NAME = self.triggers_replace[0]

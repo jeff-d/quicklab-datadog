@@ -148,11 +148,12 @@ variable "lbc_ready" {
 
     This edge exists for destroy, not create. The CloudPrem chart creates an Ingress that the
     controller reconciles into an ALB and holds the ingress.k8s.aws/resources finalizer on.
-    Terraform destroys dependents first, so making the namespace's owner depend on the controller
-    keeps the controller running until the namespace is gone. Without it the two are siblings
-    (both merely downstream of the kubeconfig), the controller can be uninstalled first, and the
-    Ingress then blocks namespace deletion indefinitely while its ALB leaks. See also the
-    Controller lifetimes ADR in ../qlpoc/AGENTS.md.
+    Terraform destroys dependents first, so making the release's dependency depend on the
+    controller keeps the controller running until the release is uninstalled, and Helm's
+    uninstall waits for the Ingress to disappear. Without it the two are siblings (both merely
+    downstream of the kubeconfig), the controller can be uninstalled first, and the Ingress then
+    keeps a finalizer nobody clears: the uninstall waits until its timeout and the ALB leaks.
+    See also the Controller lifetimes ADR in ../qlpoc/AGENTS.md.
   EOT
 }
 variable "karpenter_ready" {
@@ -166,12 +167,10 @@ variable "karpenter_ready" {
 
     Like lbc_ready this edge is about destroy, but it protects capacity rather than credentials.
     CloudPrem's pods run on Karpenter-provisioned nodes, and deleting the NodePool starts
-    draining them. Without this edge the NodePool delete and the namespace delete are siblings,
-    so the nodes can be torn out from under pods that are still running: the NodeClaim cannot
-    drain, the sweep in ../qlpoc/cluster.tf force-terminates the instance, and the orphaned pods
-    stay Terminating until Karpenter reconciles the dead node -- which routinely overruns the
-    namespace delete's timeout. Ordering the NodePool after the namespace means the nodes are
-    already empty when the NodePool goes, so the drain is immediate.
+    draining them. Without this edge the NodePool delete and the CloudPrem release's uninstall
+    are siblings, so Karpenter starts draining nodes that still hold running pods. Ordering the
+    NodePool after the release means the nodes are already empty when the NodePool goes, so the
+    drain is immediate.
 
     On create this correctly makes CloudPrem wait for the NodePool to exist, so its pods have
     somewhere to schedule instead of sitting Pending against the release's atomic timeout.
