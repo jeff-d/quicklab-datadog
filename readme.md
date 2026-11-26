@@ -39,6 +39,20 @@ CloudPrem's internal ingress carries `alb.ingress.kubernetes.io/inbound-cidrs` s
 
 The internal load balancer (HTTP on port 80) routes only Quickwit, Elasticsearch and Datadog-format (`/api/v2/logs`) ingest paths to the indexer, and the server's Agent sends to it with `DD_LOGS_CONFIG_LOGS_DD_URL`. Chart 0.5.6 also ships an optional OTLP `intake` component, off by default, whose container runs `pomsky-intake`, a program no published CloudPrem image contains yet (`v0.1.35`, `cp-v0.1.36-rc1`, `edge`; tested 2026-10-30), so it stays off and OpenTelemetry collectors don't send to CloudPrem (qlpoc README).
 
+### The destroy waits for the Ingress through Helm
+
+`helm_release.cloudprem`'s uninstall waits until the Ingress is gone, and the Ingress goes only when the load balancer controller has deleted the ALB and cleared its finalizer. That is why the controller has to outlive the release (`lbc_ready`, see `variables.tf` below). By the time `terraform_data.cloudprem_secrets` is destroyed, the ALB, its target groups and its security group are gone, so its destroy provisioner only deletes the two secrets its create step made. It used to delete the namespace too, as a 600-second barrier; that wait is gone. In lab destroys on 2026-11-25 the ALB disappeared about 5 s into the uninstall, the Ingress when the uninstall returned (25 to 31 s), and the namespace delete that used to follow took 9 s. The slow deletes seen earlier (6 min 46 s on 2026-10-31) came from the Karpenter instance sweep that `a7cef89` removed in qlpoc, which left CloudPrem's pods `Terminating` on terminated nodes.
+
+If a finalizer never clears, the uninstall fails at the release's `timeout` (600 s) and stops the destroy, so a leaked ALB can't pass silently. The namespace stays, empty, when only CloudPrem is switched off; it goes with the cluster.
+
+### Secrets Manager recovery windows are zeroed
+
+`aws_secretsmanager_secret.cloudprem_ingress_endpoint` sets `recovery_window_in_days = 0`, matching `module.datadog_secrets`. The 30-day default keeps a secret's name reserved after destroy, so rebuilding at the same `uid` fails with "already scheduled for deletion": a destroy that reports success but blocks the next apply, which single-shot destroy exists to rule out.
+
+### RDS password character set
+
+`random_password.cloudprem_db` sets `override_special` explicitly: RDS rejects `/`, `@`, `"`, and space in `MasterUserPassword`. The value is separately `urlencode`d where it is composed into the metastore connection string.
+
 ## cloudtrail.tf
 
 _Inline._
@@ -137,6 +151,30 @@ The Operator creates the Cluster Agent and the node Agents after `kubectl apply`
 ## main.tf
 
 _Inline._
+
+## provider.tf
+
+### The Helm provider is declared but not configured
+
+`provider.tf` declares `helm` in `required_providers` without a `provider` block. A child module states which providers its resources need and inherits configuration from the root. `helm_release.cloudprem` and `helm_release.datadog_operator` previously relied on Terraform inferring the provider from the resource type prefix, which left this module's version constraint unexpressed.
+
+## variables.tf
+
+### `cluster_enabled`, not a null check on `cluster_name`
+
+`var.cluster_enabled` is passed straight from the caller's `create_cluster` and gates the module's cluster-facing `count`/`for_each`. It is deliberately not derived from `var.cluster_name`, which is built from a managed resource attribute and is therefore unknown until apply on a greenfield build, and `count` cannot accept an unknown. The two inputs look redundant and must not be collapsed into one.
+
+### Reference-carrier variables
+
+The module is a separate root from the caller's Cluster component, so it cannot reference cluster resources directly, and every ordering constraint has to arrive through an input variable. `kubeconfig_ready`, `lbc_ready`, and `karpenter_ready` are typed `any`, default `null`, and their values are never read. Only the reference matters: each one hands the module a dependency edge on a cluster resource that is out of scope for it. They order individual resources rather than the whole module, so the module's AWS-only resources are not serialized behind cluster creation.
+
+The caller wraps each in `try(..., null)` so the arguments still resolve when its Cluster component is off (`karpenter_ready` is also null whenever the cluster autoscaler is not Karpenter). Which resource each one names is the entire point, so none of them should be repointed without working out what edge is being given up. `kubeconfig_ready` in particular must name the anchor that owns the kubeconfig's `rm -f` and not the resource that writes the file: naming the writer would leave this module's `kubectl` provisioners unordered against that delete and able to lose the kubeconfig mid-destroy. Each variable's `description` carries the same reasoning for anyone reading from this side.
+
+All three are anchored on `terraform_data.cloudprem_secrets`, which sits between the release and the controller: the release depends on it, so on destroy the release is uninstalled first, then it, and only then the controller and the NodePool.
+
+- `kubeconfig_ready` is about authentication, and works in both directions: the module's `kubectl` provisioners need the file to exist on create and to still exist on destroy.
+- `lbc_ready` is about credentials, and exists for destroy. The CloudPrem chart creates an Ingress that the load balancer controller reconciles into an ALB and holds `ingress.k8s.aws/resources` on. Terraform destroys dependents first, so making the release's dependency depend on the controller keeps the controller alive until the release is uninstalled, and Helm's uninstall waits for the Ingress to disappear. Without the edge the two are siblings, both merely downstream of the kubeconfig, the controller can be uninstalled first, and the Ingress then keeps a finalizer nobody clears: the uninstall waits until its timeout and the ALB leaks.
+- `karpenter_ready` is about capacity, also for destroy, and carries the caller's Karpenter resources. CloudPrem's pods run on Karpenter-provisioned nodes, and deleting the NodePool starts draining them. Unordered, the NodePool delete and the release's uninstall are siblings, so Karpenter starts draining nodes that still hold running CloudPrem pods. That delete is bounded and unguarded, so a drain that runs past its bound fails the destroy. Ordering the NodePool after the release means the nodes are already empty when the NodePool goes. On create the same edge correctly makes CloudPrem wait for a NodePool to exist, so its pods have somewhere to schedule instead of sitting `Pending` against the release's atomic timeout.
 
 ## tests
 

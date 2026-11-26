@@ -99,7 +99,7 @@ resource "terraform_data" "cloudprem_secrets" {
   # resource, and only then the controller and the NodePool. Helm's uninstall waits for the
   # Ingress to disappear, which needs the controller to clear its finalizer, so the controller
   # has to outlive the release.
-  # See ../qlpoc/readme.md "Terraform Implementation Details / Datadog".
+  # See readme.md "Terraform Implementation Details / variables.tf".
   depends_on       = [var.kubeconfig_ready, var.lbc_ready, var.karpenter_ready]
   triggers_replace = [var.cluster_name, local.cloudprem.namespace]
 

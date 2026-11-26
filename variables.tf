@@ -153,7 +153,7 @@ variable "lbc_ready" {
     uninstall waits for the Ingress to disappear. Without it the two are siblings (both merely
     downstream of the kubeconfig), the controller can be uninstalled first, and the Ingress then
     keeps a finalizer nobody clears: the uninstall waits until its timeout and the ALB leaks.
-    See also the Controller lifetimes ADR in ../qlpoc/AGENTS.md.
+    See readme.md "Terraform Implementation Details / variables.tf".
   EOT
 }
 variable "karpenter_ready" {

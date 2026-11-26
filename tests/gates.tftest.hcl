@@ -122,8 +122,8 @@ run "byoc_without_cluster_mints_key_but_builds_nothing" {
   }
 }
 
-# Regression test for the failure described under "Gate count and for_each on plan-known
-# flags" in ../qlpoc/AGENTS.md. On a greenfield build cluster_name comes from a managed
+# Regression test for the failure described in readme.md "Terraform Implementation Details /
+# variables.tf" under cluster_enabled. On a greenfield build cluster_name comes from a managed
 # resource attribute and is unknown until apply, so every gate has to read
 # var.cluster_enabled instead.
 #
