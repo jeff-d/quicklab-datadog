@@ -250,7 +250,7 @@ run "cloudprem_log_tailing_without_a_cluster" {
   }
 }
 
-# With the OpenTelemetry collector, qlpoc installs kube-stack on the cluster instead, so the
+# With the OpenTelemetry collector, QuickLab installs kube-stack on the cluster instead, so the
 # Operator, the DatadogAgent and the Operator's API key are left out. The application key stays:
 # CloudPrem's deregistration reads it.
 run "cluster_with_otelcol_skips_the_operator" {
